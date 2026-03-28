@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Prepare SIGAPTEL Dart Define",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "if (Test-Path '${workspaceFolder}/env/local.json') { Copy-Item '${workspaceFolder}/env/local.json' '${workspaceFolder}/.vscode/.dart-define.generated.json' -Force; Write-Host 'Using env/local.json for dart-define.' } else { '{}' | Set-Content -Path '${workspaceFolder}/.vscode/.dart-define.generated.json' -Encoding UTF8; Write-Host 'env/local.json not found. Using empty dart-define file (debug fallback active).'; }"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}
