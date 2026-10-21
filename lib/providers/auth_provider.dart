@@ -4,9 +4,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/app_config.dart';
-
 class AuthProvider with ChangeNotifier {
+  static const String _loginUrl = 'https://tower.baritotimurkab.go.id/api/login';
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'auth_user';
 
@@ -37,10 +36,11 @@ class AuthProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        AppConfig.apiUri('/api/login'),
-        headers: AppConfig.authHeaders(
-          extra: {'Content-Type': 'application/json'},
-        ),
+        Uri.parse(_loginUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         body: jsonEncode({
           'email': email,
           'password': password,

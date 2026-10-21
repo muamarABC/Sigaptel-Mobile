@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'config/app_config.dart';
 import 'screens/login_page.dart';
 import 'screens/menu_page.dart';
 import 'screens/profile_page.dart';
@@ -13,16 +12,18 @@ import 'screens/speedtest_settings_page.dart';
 import 'providers/auth_provider.dart';
 import 'providers/survey_provider.dart';
 import 'providers/api_survey_provider.dart';
+import 'providers/api_starlink_provider.dart';
+import 'providers/api_vsat_provider.dart';
+import 'providers/vsat_pending_provider.dart';
+import 'screens/starlink_page.dart';
+import 'screens/vsat_page.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(SigaptelApp(configError: AppConfig.validationError));
+  runApp(const SigaptelApp());
 }
 
 class SigaptelApp extends StatelessWidget {
-  final String? configError;
-
-  const SigaptelApp({super.key, this.configError});
+  const SigaptelApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +32,9 @@ class SigaptelApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => SurveyProvider()),
         ChangeNotifierProvider(create: (_) => ApiSurveyProvider()),
+        ChangeNotifierProvider(create: (_) => ApiStarlinkProvider()),
+        ChangeNotifierProvider(create: (_) => ApiVsatProvider()),
+        ChangeNotifierProvider(create: (_) => VsatPendingProvider()),
       ],
       child: MaterialApp(
         title: 'SIGAPTEL',
@@ -46,9 +50,7 @@ class SigaptelApp extends StatelessWidget {
             selectionHandleColor: Colors.blueAccent,
           ),
         ),
-        home: configError == null
-          ? const _AuthGate()
-          : _ConfigErrorPage(message: configError!),
+        home: const _AuthGate(),
         routes: {
           LoginPage.routeName: (_) => const LoginPage(),
           MenuPage.routeName: (_) => const MenuPage(),
@@ -58,6 +60,8 @@ class SigaptelApp extends StatelessWidget {
           MapPage.routeName: (_) => const MapPage(),
           SurveyDetailPage.routeName: (_) => const SurveyDetailPage(),
           SpeedtestSettingsPage.routeName: (_) => const SpeedtestSettingsPage(),
+          StarlinkPage.routeName: (_) => const StarlinkPage(),
+          VsatPage.routeName: (_) => const VsatPage(),
         },
       ),
     );
@@ -83,49 +87,6 @@ class _AuthGate extends StatelessWidget {
 
         return const LoginPage();
       },
-    );
-  }
-}
-
-class _ConfigErrorPage extends StatelessWidget {
-  final String message;
-
-  const _ConfigErrorPage({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock_outline, size: 48, color: Colors.redAccent),
-                const SizedBox(height: 16),
-                const Text(
-                  'Aplikasi Belum Dikonfigurasi',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Minta kode akses dan endpoint API dari pemilik proyek.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

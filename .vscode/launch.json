@@ -2,15 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "SIGAPTEL Auto Run (local.json optional)",
+      "name": "SIGAPTEL Run",
       "request": "launch",
       "type": "dart",
       "flutterMode": "debug",
-      "program": "lib/main.dart",
-      "preLaunchTask": "Prepare SIGAPTEL Dart Define",
-      "toolArgs": [
-        "--dart-define-from-file=${workspaceFolder}/.vscode/.dart-define.generated.json"
-      ]
+      "program": "lib/main.dart"
     }
   ]
 }

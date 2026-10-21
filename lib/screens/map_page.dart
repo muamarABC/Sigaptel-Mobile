@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../config/app_config.dart';
 import '../models/remote_survey.dart';
 import '../models/tower.dart';
 import '../providers/api_survey_provider.dart';
@@ -276,6 +275,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _fetchTowers() async {
+    if (!mounted) return;
     setState(() {
       _isLoadingTowers = true;
       _fetchError = null;
@@ -307,16 +307,20 @@ class _MapPageState extends State<MapPage> {
         _towerData['tower_${tower.id}'] = tower;
       }
 
-      setState(() {
-        _apiTowerPoints = mapPoints;
-        _isLoadingTowers = false;
-        _invalidateMapDataCaches();
-      });
+      if (mounted) {
+        setState(() {
+          _apiTowerPoints = mapPoints;
+          _isLoadingTowers = false;
+          _invalidateMapDataCaches();
+        });
+      }
     } catch (e) {
-      setState(() {
-        _fetchError = 'Gagal memuat data tower';
-        _isLoadingTowers = false;
-      });
+      if (mounted) {
+        setState(() {
+          _fetchError = 'Gagal memuat data tower';
+          _isLoadingTowers = false;
+        });
+      }
     }
   }
 
@@ -1911,7 +1915,7 @@ class _MapPageState extends State<MapPage> {
     if (normalized.startsWith('storage/')) {
       normalized = normalized.substring('storage/'.length);
     }
-    return AppConfig.storageUrl(normalized);
+    return 'https://tower.baritotimurkab.go.id/storage/$normalized';
   }
 
   Widget _surveyPhotoSection(RemoteSurvey survey) {

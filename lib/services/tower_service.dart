@@ -2,14 +2,16 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/tower.dart';
 import '../models/config_wilayah.dart';
-import '../config/app_config.dart';
+
+class ApiConfig {
+  static const String baseUrl = 'https://tower.baritotimurkab.go.id';
+}
 
 class TowerService {
   static Future<List<Tower>> fetchAllTowers() async {
     try {
       final response = await http.get(
-        AppConfig.apiUri('/api/towers'),
-        headers: AppConfig.authHeaders(),
+        Uri.parse('${ApiConfig.baseUrl}/api/towers'),
       ).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
@@ -45,8 +47,7 @@ class TowerService {
   static Future<Tower?> fetchTowerById(int towerId) async {
     try {
       final response = await http.get(
-        AppConfig.apiUri('/api/towers/$towerId'),
-        headers: AppConfig.authHeaders(),
+        Uri.parse('${ApiConfig.baseUrl}/api/towers/$towerId'),
       ).timeout(
         const Duration(seconds: 10),
       );
@@ -76,11 +77,8 @@ class TowerService {
   static Future<List<Tower>> fetchTowersByKecamatan(String kecamatan) async {
     try {
       final response = await http.get(
-        AppConfig.apiUri(
-          '/api/towers/filter/kecamatan',
-          queryParameters: {'kecamatan': kecamatan},
-        ),
-        headers: AppConfig.authHeaders(),
+        Uri.parse('${ApiConfig.baseUrl}/api/towers/filter/kecamatan')
+            .replace(queryParameters: {'kecamatan': kecamatan}),
       ).timeout(
         const Duration(seconds: 10),
       );
@@ -111,11 +109,8 @@ class TowerService {
   static Future<List<Tower>> fetchTowersByStatus(String status) async {
     try {
       final response = await http.get(
-        AppConfig.apiUri(
-          '/api/towers/filter/status',
-          queryParameters: {'status': status},
-        ),
-        headers: AppConfig.authHeaders(),
+        Uri.parse('${ApiConfig.baseUrl}/api/towers/filter/status')
+            .replace(queryParameters: {'status': status}),
       ).timeout(
         const Duration(seconds: 10),
       );
@@ -144,8 +139,7 @@ class TowerService {
   static Future<Map<String, List<ConfigWilayah>>> fetchWilayahPolygons() async {
     try {
       final response = await http.get(
-        AppConfig.apiUri('/api/wilayah'),
-        headers: AppConfig.authHeaders(),
+        Uri.parse('${ApiConfig.baseUrl}/api/wilayah'),
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {

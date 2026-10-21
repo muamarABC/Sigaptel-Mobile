@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -37,30 +38,27 @@ class SpeedMetrics {
   final double? downloadMbps;
   final double? uploadMbps;
   final int? pingMs;
+  final String? downloadError;
+  final String? uploadError;
 
   const SpeedMetrics({
     this.downloadMbps,
     this.uploadMbps,
     this.pingMs,
+    this.downloadError,
+    this.uploadError,
   });
 }
 
-enum SpeedTestStage {
-  download,
-  upload,
-  ping,
-}
+enum SpeedTestStage { download, upload, ping }
 
-typedef SpeedTestProgressCallback = void Function(
-  SpeedTestStage stage,
-  double progressPercent,
-);
+typedef SpeedTestProgressCallback =
+    void Function(SpeedTestStage stage, double progressPercent);
 
-enum SpeedTestMode {
-  cepat,
-  standar,
-  akurat,
-}
+typedef SpeedTestSpeedCallback =
+    void Function(SpeedTestStage stage, double speedMbps);
+
+enum SpeedTestMode { cepat, standar, akurat }
 
 extension SpeedTestModeX on SpeedTestMode {
   String get storageValue {
@@ -100,10 +98,10 @@ class SpeedTestSettings {
   static const String _modeKey = 'speedtest_mode';
 
   static const String defaultDownloadUrl =
-      'https://speed.cloudflare.com/__down?bytes=5000000';
+      'https://speed.cloudflare.com/__down?bytes=50000000';
   static const String defaultUploadUrl = 'https://httpbin.org/post';
   static const String defaultPingUrl = 'https://www.google.com/generate_204';
-  static const int defaultDownloadBytes = 5000000;
+  static const int defaultDownloadBytes = 50000000;
   static const int defaultUploadBytes = 1000000;
 
   final String downloadUrl;
@@ -138,7 +136,8 @@ class SpeedTestSettings {
     final downloadUrl = prefs.getString(_downloadUrlKey) ?? defaultDownloadUrl;
     final uploadUrl = prefs.getString(_uploadUrlKey) ?? defaultUploadUrl;
     final pingUrl = prefs.getString(_pingUrlKey) ?? defaultPingUrl;
-    final downloadBytes = prefs.getInt(_downloadBytesKey) ?? defaultDownloadBytes;
+    final downloadBytes =
+        prefs.getInt(_downloadBytesKey) ?? defaultDownloadBytes;
     final uploadBytes = prefs.getInt(_uploadBytesKey) ?? defaultUploadBytes;
     final mode = SpeedTestModeX.fromStorage(prefs.getString(_modeKey));
 
@@ -164,8 +163,11 @@ class SpeedTestSettings {
 }
 
 class NetworkMetricsService {
-  static const MethodChannel _channel =
-      MethodChannel('com.sigaptel/network_metrics');
+  static const MethodChannel _channel = MethodChannel(
+    'com.sigaptel/network_metrics',
+  );
+  String? _lastDownloadError;
+  String? _lastUploadError;
 
   Future<SignalMetrics> readSignalMetrics() async {
     if (!Platform.isAndroid) {
@@ -234,35 +236,41 @@ class NetworkMetricsService {
   Future<SpeedMetrics> runSpeedTest({
     Duration timeout = const Duration(seconds: 60),
     SpeedTestProgressCallback? onProgress,
+    SpeedTestSpeedCallback? onSpeedUpdate,
   }) async {
     final settings = await SpeedTestSettings.load();
 
     final config = switch (settings.mode) {
       SpeedTestMode.cepat => (
-          runs: 1,
-          streams: 3,
-          pingSamples: 3,
-          warmUp: false,
-        ),
+        runs: 1,
+        streams: 2,
+        downloadDuration: const Duration(seconds: 6),
+        pingSamples: 3,
+        warmUp: false,
+      ),
       SpeedTestMode.standar => (
-          runs: 2,
-          streams: 4,
-          pingSamples: 5,
-          warmUp: true,
-        ),
+        runs: 2,
+        streams: 2,
+        downloadDuration: const Duration(seconds: 8),
+        pingSamples: 5,
+        warmUp: true,
+      ),
       SpeedTestMode.akurat => (
-          runs: 3,
-          streams: 4,
-          pingSamples: 9,
-          warmUp: true,
-        ),
+        runs: 3,
+        streams: 2,
+        downloadDuration: const Duration(seconds: 10),
+        pingSamples: 9,
+        warmUp: true,
+      ),
     };
 
     return runSpeedTestAccurate(
       timeout: timeout,
       onProgress: onProgress,
+      onSpeedUpdate: onSpeedUpdate,
       runs: config.runs,
       parallelStreams: config.streams,
+      downloadDuration: config.downloadDuration,
       pingSamples: config.pingSamples,
       enableWarmUp: config.warmUp,
     );
@@ -271,12 +279,16 @@ class NetworkMetricsService {
   Future<SpeedMetrics> runSpeedTestAccurate({
     Duration timeout = const Duration(seconds: 90),
     SpeedTestProgressCallback? onProgress,
+    SpeedTestSpeedCallback? onSpeedUpdate,
     int runs = 3,
-    int parallelStreams = 4,
+    int parallelStreams = 2,
+    Duration downloadDuration = const Duration(seconds: 8),
     int pingSamples = 9,
     bool enableWarmUp = true,
   }) async {
     final settings = await SpeedTestSettings.load();
+    _lastDownloadError = null;
+    _lastUploadError = null;
     final safeRuns = runs < 1 ? 1 : runs;
     final safeStreams = parallelStreams < 1 ? 1 : parallelStreams;
     final safePingSamples = pingSamples < 3 ? 3 : pingSamples;
@@ -290,18 +302,22 @@ class NetworkMetricsService {
     final pingResults = <int>[];
 
     for (var runIndex = 0; runIndex < safeRuns; runIndex++) {
-      final download = await _measureParallelDownloadMbps(
-        settings: settings,
-        timeout: timeout,
-        streams: safeStreams,
-        onRunProgress: (runPercent) {
-          _emitProgress(
-            onProgress,
-            SpeedTestStage.download,
-            _mapRunProgressToStage(runIndex, safeRuns, runPercent),
-          );
-        },
-      );
+      final download = _lastDownloadError?.startsWith('HTTP 429') == true
+          ? null
+          : await _measureParallelDownloadMbps(
+              settings: settings,
+              timeout: timeout,
+              streams: safeStreams,
+              testDuration: downloadDuration,
+              onSpeedUpdate: onSpeedUpdate,
+              onRunProgress: (runPercent) {
+                _emitProgress(
+                  onProgress,
+                  SpeedTestStage.download,
+                  _mapRunProgressToStage(runIndex, safeRuns, runPercent),
+                );
+              },
+            );
       if (download != null) {
         downloadResults.add(download);
       }
@@ -310,6 +326,7 @@ class NetworkMetricsService {
         settings: settings,
         timeout: timeout,
         streams: safeStreams,
+        onSpeedUpdate: onSpeedUpdate,
         onRunProgress: (runPercent) {
           _emitProgress(
             onProgress,
@@ -346,6 +363,8 @@ class NetworkMetricsService {
       downloadMbps: _medianDouble(downloadResults),
       uploadMbps: _medianDouble(uploadResults),
       pingMs: _medianInt(pingResults),
+      downloadError: downloadResults.isEmpty ? _lastDownloadError : null,
+      uploadError: uploadResults.isEmpty ? _lastUploadError : null,
     );
   }
 
@@ -360,7 +379,11 @@ class NetworkMetricsService {
     callback(stage, value.clamp(0, 100).toDouble());
   }
 
-  double _mapRunProgressToStage(int runIndex, int totalRuns, double runPercent) {
+  double _mapRunProgressToStage(
+    int runIndex,
+    int totalRuns,
+    double runPercent,
+  ) {
     if (totalRuns <= 0) {
       return runPercent.clamp(0, 100).toDouble();
     }
@@ -375,15 +398,7 @@ class NetworkMetricsService {
     final warmupTimeout = timeout > const Duration(seconds: 12)
         ? const Duration(seconds: 12)
         : timeout;
-    final downloadBytes = max(300000, settings.downloadBytes ~/ 10);
     final uploadBytes = max(120000, settings.uploadBytes ~/ 10);
-
-    try {
-      final warmupUri = _buildDownloadUri(settings.downloadUrl, downloadBytes);
-      await _measureSingleDownloadBytes(url: warmupUri, timeout: warmupTimeout);
-    } catch (_) {
-      // Best effort warm-up.
-    }
 
     try {
       await _measureSingleUploadBytes(
@@ -406,33 +421,153 @@ class NetworkMetricsService {
     required SpeedTestSettings settings,
     required Duration timeout,
     required int streams,
+    required Duration testDuration,
+    SpeedTestSpeedCallback? onSpeedUpdate,
     required void Function(double runPercent) onRunProgress,
   }) async {
     final safeStreams = streams < 1 ? 1 : streams;
-    final perStreamBytes = max(1000000, settings.downloadBytes ~/ safeStreams);
-    var finished = 0;
-
     onRunProgress(0);
     final stopwatch = Stopwatch()..start();
+    var totalDownloadedBytes = 0;
+    var lastReportedAt = 0;
+    var lastReportedBytes = 0;
+    var lastProgressAt = 0;
+    final requestBytes = max(settings.downloadBytes, 50 * 1024 * 1024);
+    var rateLimited = false;
 
-    final futures = List.generate(safeStreams, (index) async {
-      final uri = _buildDownloadUri(settings.downloadUrl, perStreamBytes);
-      final bytes = await _measureSingleDownloadBytes(url: uri, timeout: timeout);
-      finished += 1;
-      onRunProgress((finished / safeStreams) * 100.0);
-      return bytes;
-    });
+    Future<void> downloadStream() async {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 10);
+      try {
+        while (!rateLimited && stopwatch.elapsed < testDuration) {
+          final remaining = testDuration - stopwatch.elapsed;
+          final requestTimeout = remaining < timeout ? remaining : timeout;
+          if (requestTimeout <= Duration.zero) break;
 
-    final bytesList = await Future.wait(futures);
+          final request = await client
+              .getUrl(_buildDownloadUri(settings.downloadUrl, requestBytes))
+              .timeout(requestTimeout);
+          request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+          request.headers.set(HttpHeaders.pragmaHeader, 'no-cache');
+          final response = await request.close().timeout(requestTimeout);
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            if (response.statusCode == 429) {
+              final retryAfter = response.headers.value(
+                HttpHeaders.retryAfterHeader,
+              );
+              final waitText = _formatRetryAfter(retryAfter);
+              _lastDownloadError = waitText == null
+                  ? 'Server membatasi permintaan (HTTP 429). Coba lagi nanti atau gunakan server lain.'
+                  : 'Server membatasi permintaan (HTTP 429). Coba lagi dalam $waitText atau gunakan server lain.';
+              rateLimited = true;
+            } else {
+              _lastDownloadError =
+                  'Server pengujian menolak unduhan (HTTP ${response.statusCode}).';
+            }
+            await response.drain<void>().timeout(requestTimeout);
+            break;
+          }
+
+          var bytesInResponse = 0;
+          final completer = Completer<void>();
+          late StreamSubscription<List<int>> subscription;
+          subscription = response.listen(
+            (chunk) {
+              bytesInResponse += chunk.length;
+              totalDownloadedBytes += chunk.length;
+              final elapsedMs = stopwatch.elapsedMilliseconds;
+              if (elapsedMs - lastReportedAt >= 200) {
+                final elapsedUs = stopwatch.elapsedMicroseconds;
+                final intervalBytes = totalDownloadedBytes - lastReportedBytes;
+                final intervalUs = elapsedUs - lastReportedAt * 1000;
+                if (intervalBytes > 0 && intervalUs > 0) {
+                  onSpeedUpdate?.call(
+                    SpeedTestStage.download,
+                    _calculateMbps(intervalBytes, intervalUs) ?? 0,
+                  );
+                  lastReportedBytes = totalDownloadedBytes;
+                  lastReportedAt = elapsedMs;
+                }
+              }
+              if (elapsedMs - lastProgressAt >= 200) {
+                onRunProgress(
+                  (stopwatch.elapsedMicroseconds /
+                          testDuration.inMicroseconds *
+                          100)
+                      .clamp(0, 100)
+                      .toDouble(),
+                );
+                lastProgressAt = elapsedMs;
+              }
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              _lastDownloadError ??= _describeTransferError(
+                error,
+                direction: 'unduhan',
+              );
+              if (!completer.isCompleted)
+                completer.completeError(error, stackTrace);
+            },
+            onDone: () {
+              if (!completer.isCompleted) completer.complete();
+            },
+            cancelOnError: true,
+          );
+
+          final bodyTimeLeft = testDuration - stopwatch.elapsed;
+          if (bodyTimeLeft <= Duration.zero) {
+            await subscription.cancel();
+            break;
+          }
+          final durationTimer = Timer(bodyTimeLeft, () async {
+            await subscription.cancel();
+            if (!completer.isCompleted) completer.complete();
+          });
+          try {
+            await completer.future.timeout(requestTimeout);
+          } on TimeoutException {
+            _lastDownloadError ??=
+                'Koneksi terlalu lambat: waktu tunggu unduhan habis.';
+            await subscription.cancel();
+          } catch (_) {
+            // Keep any bytes already received and stop this stream on errors.
+          } finally {
+            durationTimer.cancel();
+          }
+
+          if (bytesInResponse == 0) {
+            _lastDownloadError ??= 'Server mengirim 0 byte';
+            break;
+          }
+        }
+      } catch (error) {
+        _lastDownloadError ??= _describeTransferError(
+          error,
+          direction: 'unduhan',
+        );
+      } finally {
+        client.close(force: true);
+      }
+    }
+
+    await Future.wait(List.generate(safeStreams, (_) => downloadStream()));
     stopwatch.stop();
+    final finalIntervalBytes = totalDownloadedBytes - lastReportedBytes;
+    final finalIntervalUs =
+        stopwatch.elapsedMicroseconds - (lastReportedAt * 1000);
+    if (finalIntervalBytes > 0 && finalIntervalUs > 0) {
+      onSpeedUpdate?.call(
+        SpeedTestStage.download,
+        _calculateMbps(finalIntervalBytes, finalIntervalUs) ?? 0,
+      );
+    }
 
-    final totalBytes = bytesList.fold<int>(0, (sum, value) => sum + value);
-    if (totalBytes <= 0 || stopwatch.elapsedMilliseconds <= 0) {
+    onRunProgress(100);
+    if (totalDownloadedBytes <= 0 || stopwatch.elapsedMicroseconds <= 0) {
       return null;
     }
 
-    final bitsPerSecond = (totalBytes * 8) / (stopwatch.elapsedMilliseconds / 1000.0);
-    return bitsPerSecond / 1000000.0;
+    return _calculateMbps(totalDownloadedBytes, stopwatch.elapsedMicroseconds);
   }
 
   Uri _buildDownloadUri(String rawUrl, int targetBytes) {
@@ -448,35 +583,56 @@ class NetworkMetricsService {
     return uri.replace(queryParameters: updatedQuery);
   }
 
-  Future<int> _measureSingleDownloadBytes({
-    required Uri url,
-    required Duration timeout,
-  }) async {
-    HttpClient? client;
-    try {
-      client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-      final request = await client.getUrl(url).timeout(timeout);
-      final response = await request.close().timeout(timeout);
-      if (response.statusCode < 200 || response.statusCode >= 400) {
-        return 0;
-      }
+  String? _formatRetryAfter(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
 
-      var totalBytes = 0;
-      await for (final chunk in response) {
-        totalBytes += chunk.length;
+    final seconds = int.tryParse(value.trim());
+    if (seconds != null && seconds >= 0) {
+      if (seconds < 60) return '$seconds detik';
+      final minutes = seconds ~/ 60;
+      final remainingSeconds = seconds % 60;
+      if (minutes < 60) {
+        return remainingSeconds == 0
+            ? '$minutes menit'
+            : '$minutes menit $remainingSeconds detik';
       }
-      return totalBytes;
-    } catch (_) {
-      return 0;
-    } finally {
-      client?.close(force: true);
+      final hours = minutes ~/ 60;
+      final remainingMinutes = minutes % 60;
+      return remainingMinutes == 0
+          ? '$hours jam'
+          : '$hours jam $remainingMinutes menit';
     }
+
+    try {
+      final retryAt = HttpDate.parse(value).toUtc();
+      final secondsUntilRetry = retryAt
+          .difference(DateTime.now().toUtc())
+          .inSeconds;
+      if (secondsUntilRetry <= 0) return 'segera';
+      return _formatRetryAfter(secondsUntilRetry.toString());
+    } on FormatException {
+      return 'sesuai instruksi server';
+    }
+  }
+
+  String _describeTransferError(Object error, {required String direction}) {
+    if (error is TimeoutException) {
+      return 'Koneksi terlalu lambat: waktu tunggu $direction habis.';
+    }
+    if (error is SocketException) {
+      return 'Koneksi internet terputus saat menguji $direction.';
+    }
+    if (error is HandshakeException) {
+      return 'Koneksi aman ke server pengujian gagal (TLS).';
+    }
+    return 'Gagal menguji $direction: ${error.runtimeType}.';
   }
 
   Future<double?> _measureParallelUploadMbps({
     required SpeedTestSettings settings,
     required Duration timeout,
     required int streams,
+    SpeedTestSpeedCallback? onSpeedUpdate,
     required void Function(double runPercent) onRunProgress,
   }) async {
     final safeStreams = streams < 1 ? 1 : streams;
@@ -485,12 +641,33 @@ class NetworkMetricsService {
 
     onRunProgress(0);
     final stopwatch = Stopwatch()..start();
+    var totalUploadedBytes = 0;
+    var lastReportedAt = 0;
+    var lastReportedBytes = 0;
 
     final futures = List.generate(safeStreams, (index) async {
       final sentBytes = await _measureSingleUploadBytes(
         url: settings.uploadUrl,
         payloadSize: perStreamBytes,
         timeout: timeout,
+        onBytesSent: (chunkBytes) {
+          totalUploadedBytes += chunkBytes;
+          final elapsedMs = stopwatch.elapsedMilliseconds;
+          if (elapsedMs - lastReportedAt < 200) {
+            return;
+          }
+          final elapsedUs = stopwatch.elapsedMicroseconds;
+          final intervalBytes = totalUploadedBytes - lastReportedBytes;
+          final intervalUs = elapsedUs - (lastReportedAt * 1000);
+          if (intervalBytes > 0 && intervalUs > 0) {
+            onSpeedUpdate?.call(
+              SpeedTestStage.upload,
+              _calculateMbps(intervalBytes, intervalUs) ?? 0,
+            );
+            lastReportedBytes = totalUploadedBytes;
+            lastReportedAt = elapsedMs;
+          }
+        },
       );
       finished += 1;
       onRunProgress((finished / safeStreams) * 100.0);
@@ -499,38 +676,75 @@ class NetworkMetricsService {
 
     final sentList = await Future.wait(futures);
     stopwatch.stop();
+    final finalIntervalBytes = totalUploadedBytes - lastReportedBytes;
+    final finalIntervalUs =
+        stopwatch.elapsedMicroseconds - (lastReportedAt * 1000);
+    if (finalIntervalBytes > 0 && finalIntervalUs > 0) {
+      onSpeedUpdate?.call(
+        SpeedTestStage.upload,
+        _calculateMbps(finalIntervalBytes, finalIntervalUs) ?? 0,
+      );
+    }
 
     final totalBytes = sentList.fold<int>(0, (sum, value) => sum + value);
     if (totalBytes <= 0 || stopwatch.elapsedMilliseconds <= 0) {
       return null;
     }
 
-    final bitsPerSecond = (totalBytes * 8) / (stopwatch.elapsedMilliseconds / 1000.0);
-    return bitsPerSecond / 1000000.0;
+    return _calculateMbps(totalBytes, stopwatch.elapsedMicroseconds);
+  }
+
+  /// Uses microseconds so short tests are not rounded down to whole milliseconds.
+  double? _calculateMbps(int bytes, int elapsedMicroseconds) {
+    if (bytes <= 0 || elapsedMicroseconds <= 0) {
+      return null;
+    }
+    return (bytes * 8) / elapsedMicroseconds;
   }
 
   Future<int> _measureSingleUploadBytes({
     required String url,
     required int payloadSize,
     required Duration timeout,
+    void Function(int chunkBytes)? onBytesSent,
   }) async {
     HttpClient? client;
     try {
       client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
       final request = await client.postUrl(Uri.parse(url)).timeout(timeout);
-      request.headers.set(HttpHeaders.contentTypeHeader, 'application/octet-stream');
+      request.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'application/octet-stream',
+      );
+      request.contentLength = payloadSize;
 
       final random = Random();
-      final payload = List<int>.generate(payloadSize, (_) => random.nextInt(256));
-      request.add(payload);
+      const chunkSize = 32 * 1024;
+      var remaining = payloadSize;
+      await request.addStream(() async* {
+        while (remaining > 0) {
+          final length = min(chunkSize, remaining);
+          final chunk = Uint8List(length);
+          for (var i = 0; i < length; i++) {
+            chunk[i] = random.nextInt(256);
+          }
+          remaining -= length;
+          onBytesSent?.call(length);
+          yield chunk;
+        }
+      }());
 
       final response = await request.close().timeout(timeout);
       await response.drain();
-      if (response.statusCode < 200 || response.statusCode >= 400) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _lastUploadError = response.statusCode == 429
+            ? 'Server membatasi unggahan (HTTP 429). Gunakan server lain atau coba lagi nanti.'
+            : 'Server pengujian menolak unggahan (HTTP ${response.statusCode}).';
         return 0;
       }
-      return payload.length;
-    } catch (_) {
+      return payloadSize;
+    } catch (error) {
+      _lastUploadError ??= _describeTransferError(error, direction: 'unggahan');
       return 0;
     } finally {
       client?.close(force: true);

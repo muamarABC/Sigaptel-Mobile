@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +18,9 @@ import 'pending_list_page.dart';
 enum _NoSignalAction { checkFirst, validateAgain }
 
 class SurveyContent extends StatefulWidget {
-  const SurveyContent({super.key});
+  final Survey? initialSurvey;
+
+  const SurveyContent({super.key, this.initialSurvey});
 
   @override
   State<SurveyContent> createState() => _SurveyContentState();
@@ -37,25 +40,129 @@ class _SurveyContentState extends State<SurveyContent> {
   ];
 
   static const Map<String, List<String>> _baritoTimurArea = {
-    // 'Awang': ['Ampah Kota', 'Hayaping', 'Bagok', 'Juru Banu', 'Pangkan'],
-    // 'Benua Lima': ['Taniran', 'Kandris', 'Bamban', 'Tewah Pupuh', 'Banyu Landas'],
-    // 'Dusun Tengah': ['Sumber Garunggung', 'Matabu', 'Putai', 'Pulau Patai', 'Netampin'],
-    // 'Dusun Timur': ['Tamiang Layang', 'Nansarunai', 'Tewah', 'Kupang Bersih', 'Jaweten'],
-    // 'Karusen Janang': ['Dayu', 'Telang Baru', 'Siong', 'Pampa', 'Tangkan'],
-    // 'Paju Epat': ['Tampu Langit', 'Kalinapu', 'Murutuwu', 'Nunu', 'Pangkan'],
-    // 'Paku': ['Tampa', 'Juru Banu', 'Tarinsing', 'Bantai Napu', 'Pulau Patai'],
-    // 'Patangkep Tutui': ['Bentot', 'Ampari', 'Runggu Raya', 'Kalanis', 'Murutuwu'],
-    // 'Raren Batuah': ['Lenggang', 'Raren', 'Baruyan', 'Pulau Padang', 'Tuyau'],
-    'Dusun Timur' : ['Tamiang Layang','Pulau patai', 'Sarapat', 'Magantis', 'Jaar', 'Matabu', 'Jaweten', 'Haringen', 'Dorong', 'Didi', 'Karang langit', 'Harara', 'Mangkarap', 'Matarah', 'Gumpa', 'Maragut', 'Sumur'],
-    'Dusun Tengah' : ['Ampah Kota','Saing', 'Ampah Dua', 'Putai', 'Netampin', 'Sumber Garunggung', 'Muara awang', 'Rodok'],
-    'Banua Lima' : ['Kandris', 'Banyu Landas', 'Bagok', 'Bamban', 'Tewah Pupuh', 'Gudang Seng', 'Taniran'],
-    'Patangkep Tutui' : ['Pulau Padang', 'Ramania', 'Kambitin', 'Bentot', 'Ampari Bora', 'Kotam', 'Betang Nalong', 'Mawani', 'Jango', 'Lalap'],
-    'Awang' : ['Janah Jari', 'Bangkirayen', 'Tangkan', 'Ampari', 'Wungkur Nanakan', 'Hayaping', 'Biwan', 'Apar Batu', 'Pianggu', 'Danau', 'Janah Mansiwui'],
-    'Paju Epat' : ['Telang', 'Murutuwu', 'Balawa', 'Maipe', 'Telang Baru', 'Juru Banu', 'Tampu Langit', 'Siong', 'Kalinapu'],
-    'Karusen Janang' : ['Dayu', 'Wuran', 'Ipu Mea', 'Simpang Naneng', 'Lagan', 'Putut Tawuluh', 'Kandris'],
-    'Paku' : ['Tampa', 'Runggu Raya', 'Patung', 'Kalamus', 'Simpang Bingkuang', 'Kupang Baru', 'Luwau jawuk', 'Tarinsing', 'Bantai Napu', 'Pangkan', 'Gandrung', 'Paku Beto'],
-    'Pematang Karau' : ['Muara palantau', 'Ketab', 'Kupang bersih', 'Tuyau', 'Pinang tunggal', 'Nagaleah', 'Lampeong', 'Bararawa', 'Bambulung', 'Lebo', 'Tumpung ulung', 'Muruduyung', 'Sumberejo'],
-    'Raren Batuah' : ['Unsum', 'Baruyan', 'Lenggang', 'Puri', 'Batuah', 'Turan Amis', 'Tangkum', 'Sibung', 'Malintut']
+    'Dusun Timur': [
+      'Tamiang Layang',
+      'Pulau patai',
+      'Sarapat',
+      'Magantis',
+      'Jaar',
+      'Matabu',
+      'Jaweten',
+      'Haringen',
+      'Dorong',
+      'Didi',
+      'Karang langit',
+      'Harara',
+      'Mangkarap',
+      'Matarah',
+      'Gumpa',
+      'Maragut',
+      'Sumur',
+    ],
+    'Dusun Tengah': [
+      'Ampah Kota',
+      'Saing',
+      'Ampah Dua',
+      'Putai',
+      'Netampin',
+      'Sumber Garunggung',
+      'Muara awang',
+      'Rodok',
+    ],
+    'Banua Lima': [
+      'Kandris',
+      'Banyu Landas',
+      'Bagok',
+      'Bamban',
+      'Tewah Pupuh',
+      'Gudang Seng',
+      'Taniran',
+    ],
+    'Patangkep Tutui': [
+      'Pulau Padang',
+      'Ramania',
+      'Kambitin',
+      'Bentot',
+      'Ampari Bora',
+      'Kotam',
+      'Betang Nalong',
+      'Mawani',
+      'Jango',
+      'Lalap',
+    ],
+    'Awang': [
+      'Janah Jari',
+      'Bangkirayen',
+      'Tangkan',
+      'Ampari',
+      'Wungkur Nanakan',
+      'Hayaping',
+      'Biwan',
+      'Apar Batu',
+      'Pianggu',
+      'Danau',
+      'Janah Mansiwui',
+    ],
+    'Paju Epat': [
+      'Telang',
+      'Murutuwu',
+      'Balawa',
+      'Maipe',
+      'Telang Baru',
+      'Juru Banu',
+      'Tampu Langit',
+      'Siong',
+      'Kalinapu',
+    ],
+    'Karusen Janang': [
+      'Dayu',
+      'Wuran',
+      'Ipu Mea',
+      'Simpang Naneng',
+      'Lagan',
+      'Putut Tawuluh',
+      'Kandris',
+    ],
+    'Paku': [
+      'Tampa',
+      'Runggu Raya',
+      'Patung',
+      'Kalamus',
+      'Simpang Bingkuang',
+      'Kupang Baru',
+      'Luwau jawuk',
+      'Tarinsing',
+      'Bantai Napu',
+      'Pangkan',
+      'Gandrung',
+      'Paku Beto',
+    ],
+    'Pematang Karau': [
+      'Muara palantau',
+      'Ketab',
+      'Kupang bersih',
+      'Tuyau',
+      'Pinang tunggal',
+      'Nagaleah',
+      'Lampeong',
+      'Bararawa',
+      'Bambulung',
+      'Lebo',
+      'Tumpung ulung',
+      'Muruduyung',
+      'Sumberejo',
+    ],
+    'Raren Batuah': [
+      'Unsum',
+      'Baruyan',
+      'Lenggang',
+      'Puri',
+      'Batuah',
+      'Turan Amis',
+      'Tangkum',
+      'Sibung',
+      'Malintut',
+    ],
   };
 
   final _formKey = GlobalKey<FormState>();
@@ -80,12 +187,93 @@ class _SurveyContentState extends State<SurveyContent> {
   File? _photo;
   bool _submitting = false;
   bool _collectingMetrics = false;
+  bool _signalCheckCompleted = false;
   String? _metricsStatus;
   String _networkStatusText = 'Belum diuji';
   Color _networkStatusColor = const Color(0xFF64748B);
   DateTime? _lastSignalCheckedAt;
 
   final NetworkMetricsService _networkMetricsService = NetworkMetricsService();
+
+  bool get _isEditing => widget.initialSurvey != null;
+
+  String? get _existingSurveyPhotoUrl {
+    final rawPath = widget.initialSurvey?.fotoLokasiSurvei?.trim() ?? '';
+    if (rawPath.isEmpty ||
+        rawPath.startsWith('/tmp/') ||
+        rawPath.startsWith('tmp/')) {
+      return null;
+    }
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+      return rawPath;
+    }
+
+    var normalized = rawPath.startsWith('/') ? rawPath.substring(1) : rawPath;
+    if (normalized.startsWith('public/')) {
+      normalized = normalized.substring('public/'.length);
+    }
+    if (normalized.startsWith('storage/')) {
+      normalized = normalized.substring('storage/'.length);
+    }
+    return 'https://tower.baritotimurkab.go.id/storage/$normalized';
+  }
+
+  String? _matchChoice(Iterable<String> choices, String value) {
+    for (final choice in choices) {
+      if (choice.toLowerCase() == value.trim().toLowerCase()) {
+        return choice;
+      }
+    }
+    return null;
+  }
+
+  bool _isBlankspot(String? jaringan) =>
+      jaringan?.trim().toLowerCase() == 'blankspot';
+
+  String? get _blankspotHint => _isBlankspot(_selectedJaringan) ? '-' : null;
+
+  void _resetBlankspotMetrics() {
+    _rsrpC.clear();
+    _rsrqC.clear();
+    _sinrC.clear();
+    _rssiC.clear();
+    _downloadC.clear();
+    _uploadC.clear();
+    _pingC.clear();
+    _signalSuggestion = null;
+    _networkStatusText = 'Blankspot';
+    _networkStatusColor = const Color(0xFFD97706);
+    _metricsStatus = 'Parameter Blankspot akan disimpan sebagai null.';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final survey = widget.initialSurvey;
+    if (survey == null) return;
+
+    _tahunC.text = survey.tahunSurvei;
+    _latC.text = survey.latitude.toString();
+    _longC.text = survey.longitude.toString();
+    _rsrpC.text = survey.rsrp?.toString() ?? '';
+    _rsrqC.text = survey.rsrq?.toString() ?? '';
+    _sinrC.text = survey.sinr?.toString() ?? '';
+    _rssiC.text = survey.rssi?.toString() ?? '';
+    _downloadC.text = survey.downloadSpeed?.toString() ?? '';
+    _uploadC.text = survey.uploadSpeed?.toString() ?? '';
+    _pingC.text = survey.ping?.toString() ?? '';
+    _notesC.text = survey.notes ?? '';
+    _selectedKecamatan = _matchChoice(_baritoTimurArea.keys, survey.kecamatan);
+    _selectedDesa = _matchChoice(
+      _baritoTimurArea[_selectedKecamatan] ?? const <String>[],
+      survey.desa,
+    );
+    _selectedOperator = _matchChoice(_operatorOptions, survey.operatorName);
+    _selectedJaringan = _matchChoice(_jaringanOptions, survey.jaringan);
+    if (_isBlankspot(_selectedJaringan)) {
+      _resetBlankspotMetrics();
+    }
+  }
 
   Future<T?> _showAnimatedDialog<T>({
     required WidgetBuilder builder,
@@ -102,9 +290,7 @@ class _SurveyContentState extends State<SurveyContent> {
       barrierColor: Colors.black.withAlpha(90),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return SafeArea(
-          child: Builder(builder: builder),
-        );
+        return SafeArea(child: Builder(builder: builder));
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
@@ -150,11 +336,17 @@ class _SurveyContentState extends State<SurveyContent> {
     await _showAnimatedDialog<void>(
       barrierDismissible: true,
       builder: (dialogContext) {
-        final accent = success ? const Color(0xFF16A34A) : const Color(0xFFB91C1C);
-        final accentSoft = success ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2);
+        final accent = success
+            ? const Color(0xFF16A34A)
+            : const Color(0xFFB91C1C);
+        final accentSoft = success
+            ? const Color(0xFFF0FDF4)
+            : const Color(0xFFFEF2F2);
         return Center(
           child: Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -172,12 +364,16 @@ class _SurveyContentState extends State<SurveyContent> {
                         topLeft: Radius.circular(24),
                         topRight: Radius.circular(24),
                       ),
-                      border: Border(bottom: BorderSide(color: accent.withAlpha(70))),
+                      border: Border(
+                        bottom: BorderSide(color: accent.withAlpha(70)),
+                      ),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          success ? Icons.check_circle_rounded : Icons.error_rounded,
+                          success
+                              ? Icons.check_circle_rounded
+                              : Icons.error_rounded,
                           color: accent,
                         ),
                         const SizedBox(width: 8),
@@ -195,12 +391,18 @@ class _SurveyContentState extends State<SurveyContent> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 16, 18, 4),
-                    child: SingleChildScrollView(
-                      child: Text(
-                        message,
-                        style: const TextStyle(
-                          height: 1.35,
-                          color: Color(0xFF334155),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight:
+                            MediaQuery.sizeOf(dialogContext).height * 0.55,
+                      ),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          message,
+                          style: const TextStyle(
+                            height: 1.35,
+                            color: Color(0xFF334155),
+                          ),
                         ),
                       ),
                     ),
@@ -254,7 +456,8 @@ class _SurveyContentState extends State<SurveyContent> {
     if (lat == null || lng == null) {
       issues.add('- Latitude dan Longitude harus valid.');
     }
-    if (_photo == null) {
+    if (_photo == null &&
+        (widget.initialSurvey?.fotoLokasiSurvei?.trim().isEmpty ?? true)) {
       issues.add('- Foto lokasi survei wajib diisi.');
     }
 
@@ -283,13 +486,12 @@ class _SurveyContentState extends State<SurveyContent> {
       hintText: hint,
       filled: true,
       fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Color(0xFFD0D9E6)),
       ),
+      errorMaxLines: 2,
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.3),
@@ -376,7 +578,9 @@ class _SurveyContentState extends State<SurveyContent> {
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white),
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
                   )
                 else
                   Icon(icon, color: Colors.white, size: 20),
@@ -419,8 +623,8 @@ class _SurveyContentState extends State<SurveyContent> {
       'Total Blankspot': Icons.signal_cellular_off,
     };
 
-    final colors = colorMap[label] ??
-        [const Color(0xFF94A3B8), const Color(0xFF64748B)];
+    final colors =
+        colorMap[label] ?? [const Color(0xFF94A3B8), const Color(0xFF64748B)];
     final signalIcon = iconMap[label] ?? Icons.signal_cellular_null;
     final isEmpty = label == empty;
 
@@ -475,9 +679,7 @@ class _SurveyContentState extends State<SurveyContent> {
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
-                    color: isEmpty
-                        ? const Color(0xFF94A3B8)
-                        : colors.first,
+                    color: isEmpty ? const Color(0xFF94A3B8) : colors.first,
                   ),
                 ),
               ],
@@ -520,7 +722,9 @@ class _SurveyContentState extends State<SurveyContent> {
     return parts.isNotEmpty ? 'Terdeteksi: ${parts.join(' · ')}' : null;
   }
 
-  Future<_NoSignalAction?> _showNoSignalCheckDialog(SignalMetrics signal) async {
+  Future<_NoSignalAction?> _showNoSignalCheckDialog(
+    SignalMetrics signal,
+  ) async {
     if (!mounted) {
       return null;
     }
@@ -545,7 +749,9 @@ class _SurveyContentState extends State<SurveyContent> {
         const accent = Color(0xFFD97706);
         return Center(
           child: Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -563,7 +769,9 @@ class _SurveyContentState extends State<SurveyContent> {
                         topLeft: Radius.circular(24),
                         topRight: Radius.circular(24),
                       ),
-                      border: Border(bottom: BorderSide(color: accent.withAlpha(70))),
+                      border: Border(
+                        bottom: BorderSide(color: accent.withAlpha(70)),
+                      ),
                     ),
                     child: const Row(
                       children: [
@@ -602,7 +810,11 @@ class _SurveyContentState extends State<SurveyContent> {
                               children: [
                                 const Padding(
                                   padding: EdgeInsets.only(top: 3),
-                                  child: Icon(Icons.circle, size: 6, color: Color(0xFFB45309)),
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 6,
+                                    color: Color(0xFFB45309),
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -632,7 +844,9 @@ class _SurveyContentState extends State<SurveyContent> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          onPressed: () => Navigator.of(dialogContext).pop(_NoSignalAction.checkFirst),
+                          onPressed: () => Navigator.of(
+                            dialogContext,
+                          ).pop(_NoSignalAction.checkFirst),
                           child: const Text('Checking'),
                         ),
                         const SizedBox(width: 8),
@@ -643,7 +857,9 @@ class _SurveyContentState extends State<SurveyContent> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          onPressed: () => Navigator.of(dialogContext).pop(_NoSignalAction.validateAgain),
+                          onPressed: () => Navigator.of(
+                            dialogContext,
+                          ).pop(_NoSignalAction.validateAgain),
                           child: const Text('Sudah Dicek'),
                         ),
                       ],
@@ -674,9 +890,9 @@ class _SurveyContentState extends State<SurveyContent> {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Izin lokasi ditolak')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Izin lokasi ditolak')));
         }
         return;
       }
@@ -704,9 +920,9 @@ class _SurveyContentState extends State<SurveyContent> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mendapatkan lokasi: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal mendapatkan lokasi: $e')));
       }
     }
   }
@@ -733,21 +949,28 @@ class _SurveyContentState extends State<SurveyContent> {
       if (mounted) {
         final sizeKb = (await optimizedPhoto.length()) / 1024;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Foto siap upload (${sizeKb.toStringAsFixed(0)} KB)')),
+          SnackBar(
+            content: Text('Foto siap upload (${sizeKb.toStringAsFixed(0)} KB)'),
+          ),
         );
       }
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan foto: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal menyimpan foto: $e')));
     }
   }
 
   Future<void> _collectSignalAutomatically() async {
     if (_collectingMetrics) {
+      return;
+    }
+    if (_isBlankspot(_selectedJaringan)) {
+      _resetBlankspotMetrics();
+      _showSnack('Metrik sinyal tetap 0 untuk jaringan Blankspot.');
       return;
     }
 
@@ -758,6 +981,10 @@ class _SurveyContentState extends State<SurveyContent> {
 
     try {
       final signal = await _networkMetricsService.readSignalMetrics();
+      if (_isBlankspot(_selectedJaringan)) {
+        _resetBlankspotMetrics();
+        return;
+      }
 
       _applySignalValues(signal);
 
@@ -799,7 +1026,8 @@ class _SurveyContentState extends State<SurveyContent> {
             _metricsStatus = 'Memvalidasi ulang kondisi jaringan...';
           });
 
-          final validatedSignal = await _networkMetricsService.readSignalMetrics();
+          final validatedSignal = await _networkMetricsService
+              .readSignalMetrics();
           _applySignalValues(validatedSignal);
 
           if (!mounted) {
@@ -809,6 +1037,7 @@ class _SurveyContentState extends State<SurveyContent> {
           if (!validatedSignal.hasAnyValue) {
             _applyZeroSignalValues();
             setState(() {
+              _signalCheckCompleted = true;
               _signalSuggestion = _buildSignalSuggestion(validatedSignal);
               _networkStatusText = 'Tidak ada sinyal';
               _networkStatusColor = const Color(0xFFDC2626);
@@ -824,30 +1053,40 @@ class _SurveyContentState extends State<SurveyContent> {
           }
 
           setState(() {
+            _signalCheckCompleted = true;
             _signalSuggestion = _buildSignalSuggestion(validatedSignal);
             _networkStatusText = 'Valid';
             _networkStatusColor = const Color(0xFF16A34A);
             _lastSignalCheckedAt = DateTime.now();
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Metrik sinyal berhasil diisi setelah validasi ulang.')),
+            const SnackBar(
+              content: Text(
+                'Metrik sinyal berhasil diisi setelah validasi ulang.',
+              ),
+            ),
           );
           return;
         }
 
         return;
       } else {
+        setState(() {
+          _signalCheckCompleted = true;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Metrik sinyal berhasil diisi otomatis.')),
+          const SnackBar(
+            content: Text('Metrik sinyal berhasil diisi otomatis.'),
+          ),
         );
       }
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal ambil metrik sinyal: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal ambil metrik sinyal: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -860,6 +1099,11 @@ class _SurveyContentState extends State<SurveyContent> {
 
   Future<void> _startSpeedTestWithPopup() async {
     if (_collectingMetrics) {
+      return;
+    }
+    if (_isBlankspot(_selectedJaringan)) {
+      _resetBlankspotMetrics();
+      _showSnack('Speed test tidak digunakan untuk jaringan Blankspot.');
       return;
     }
 
@@ -917,10 +1161,13 @@ class _SurveyContentState extends State<SurveyContent> {
     }
 
     final source = File(sourcePath);
-    final extension = source.uri.pathSegments.isNotEmpty && source.uri.pathSegments.last.contains('.')
+    final extension =
+        source.uri.pathSegments.isNotEmpty &&
+            source.uri.pathSegments.last.contains('.')
         ? '.${source.uri.pathSegments.last.split('.').last}'
         : '.jpg';
-    final targetPath = '${photosDir.path}/survey_${DateTime.now().microsecondsSinceEpoch}$extension';
+    final targetPath =
+        '${photosDir.path}/survey_${DateTime.now().microsecondsSinceEpoch}$extension';
     return source.copy(targetPath);
   }
 
@@ -971,7 +1218,8 @@ class _SurveyContentState extends State<SurveyContent> {
           final sourceName = source.uri.pathSegments.isNotEmpty
               ? source.uri.pathSegments.last
               : 'survey_photo.jpg';
-          final targetPath = '${source.parent.path}/${DateTime.now().microsecondsSinceEpoch}-$sourceName';
+          final targetPath =
+              '${source.parent.path}/${DateTime.now().microsecondsSinceEpoch}-$sourceName';
           return candidate.copy(targetPath);
         }
       }
@@ -981,7 +1229,8 @@ class _SurveyContentState extends State<SurveyContent> {
       final sourceName = source.uri.pathSegments.isNotEmpty
           ? source.uri.pathSegments.last
           : 'survey_photo.jpg';
-      final targetPath = '${source.parent.path}/${DateTime.now().microsecondsSinceEpoch}-$sourceName';
+      final targetPath =
+          '${source.parent.path}/${DateTime.now().microsecondsSinceEpoch}-$sourceName';
       return best.copy(targetPath);
     }
 
@@ -1003,7 +1252,8 @@ class _SurveyContentState extends State<SurveyContent> {
       return null;
     }
 
-    if (_photo == null) {
+    if (_photo == null &&
+        (widget.initialSurvey?.fotoLokasiSurvei?.trim().isEmpty ?? true)) {
       await _showStatusDialog(
         title: 'Foto Belum Ada',
         message: 'Silakan ambil foto lokasi survei sebelum data dikirim.',
@@ -1029,10 +1279,11 @@ class _SurveyContentState extends State<SurveyContent> {
     final authUserId = context.read<AuthProvider>().user?.id;
 
     return Survey(
+      id: widget.initialSurvey?.id,
       kecamatan: _selectedKecamatan!,
       desa: _selectedDesa!,
-      userId: authUserId,
-      date: DateTime.now(),
+      userId: widget.initialSurvey?.userId ?? authUserId,
+      date: widget.initialSurvey?.date ?? DateTime.now(),
       latitude: latitude,
       longitude: longitude,
       operatorName: _selectedOperator!,
@@ -1045,11 +1296,11 @@ class _SurveyContentState extends State<SurveyContent> {
       uploadSpeed: _toDoubleOrNull(_uploadC.text),
       ping: _toIntOrNull(_pingC.text),
       tahunSurvei: tahun,
-      revisiKe: 0,
-      isAktif: 1,
-      parentId: null,
+      revisiKe: widget.initialSurvey?.revisiKe ?? 0,
+      isAktif: widget.initialSurvey?.isAktif ?? 1,
+      parentId: widget.initialSurvey?.parentId,
       kekuatanSinyal: Survey.hitungKekuatanSinyal(_toIntOrNull(_rsrpC.text)),
-      fotoLokasiSurvei: _photo!.path,
+      fotoLokasiSurvei: _photo?.path ?? widget.initialSurvey?.fotoLokasiSurvei,
       notes: _notesC.text.trim().isEmpty ? null : _notesC.text.trim(),
     );
   }
@@ -1061,7 +1312,9 @@ class _SurveyContentState extends State<SurveyContent> {
         const accent = Color(0xFF2563EB);
         return Center(
           child: Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1079,7 +1332,9 @@ class _SurveyContentState extends State<SurveyContent> {
                         topLeft: Radius.circular(24),
                         topRight: Radius.circular(24),
                       ),
-                      border: Border(bottom: BorderSide(color: accent.withAlpha(70))),
+                      border: Border(
+                        bottom: BorderSide(color: accent.withAlpha(70)),
+                      ),
                     ),
                     child: const Row(
                       children: [
@@ -1101,10 +1356,7 @@ class _SurveyContentState extends State<SurveyContent> {
                     padding: EdgeInsets.fromLTRB(18, 16, 18, 8),
                     child: Text(
                       'Pastikan semua input sudah benar. Data akan langsung dikirim ke server. Jika jaringan tidak stabil, data otomatis disimpan ke pending lokal.',
-                      style: TextStyle(
-                        height: 1.35,
-                        color: Color(0xFF334155),
-                      ),
+                      style: TextStyle(height: 1.35, color: Color(0xFF334155)),
                     ),
                   ),
                   Padding(
@@ -1146,6 +1398,83 @@ class _SurveyContentState extends State<SurveyContent> {
     return result ?? false;
   }
 
+  Future<void> _showMeasurementRequiredDialog({
+    required bool needsSignal,
+    required bool needsSpeedTest,
+  }) async {
+    final requiredActions = <String>[
+      if (needsSignal) '• Ambil Otomatis Sinyal',
+      if (needsSpeedTest) '• Isi kecepatan unduhan dan unggahan (boleh manual)',
+    ].join('\n');
+    await _showAnimatedDialog<void>(
+      barrierDismissible: false,
+      builder: (dialogContext) => Center(
+        child: Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.network_check_rounded,
+                    color: Color(0xFF2563EB),
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Pengukuran belum lengkap',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Selesaikan langkah berikut sebelum menyimpan survei non-Blankspot:\n\n$requiredActions',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 14,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text('Mengerti'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (_submitting) {
       return;
@@ -1153,9 +1482,30 @@ class _SurveyContentState extends State<SurveyContent> {
 
     final apiProvider = context.read<ApiSurveyProvider>();
     final localProvider = context.read<SurveyProvider>();
+    final authToken = context.read<AuthProvider>().token;
 
     final survey = await _buildSurveyIfValid();
     if (survey == null) {
+      return;
+    }
+
+    final needsSignal = !_signalCheckCompleted;
+    // Speed test values may come from the automatic test or manual input.
+    // Require valid, positive download and upload numbers either way.
+    final downloadMbps = _toDoubleOrNull(_downloadC.text);
+    final uploadMbps = _toDoubleOrNull(_uploadC.text);
+    final needsSpeedTest =
+        downloadMbps == null ||
+        !downloadMbps.isFinite ||
+        downloadMbps <= 0 ||
+        uploadMbps == null ||
+        !uploadMbps.isFinite ||
+        uploadMbps <= 0;
+    if (!_isBlankspot(survey.jaringan) && (needsSignal || needsSpeedTest)) {
+      await _showMeasurementRequiredDialog(
+        needsSignal: needsSignal,
+        needsSpeedTest: needsSpeedTest,
+      );
       return;
     }
 
@@ -1172,38 +1522,58 @@ class _SurveyContentState extends State<SurveyContent> {
       final hasNetwork = await apiProvider.hasNetwork();
       if (!hasNetwork) {
         await localProvider.addPendingSurvey(survey);
-        await localProvider.addSurvey(survey);
+        if (!_isEditing) {
+          await localProvider.addSurvey(survey);
+        }
         if (!mounted) {
           return;
         }
         await _showStatusDialog(
           title: 'Disimpan ke Pending Lokal',
           message:
-              'Jaringan minim/blankspot. Data berhasil disimpan ke pending lokal dan akan dikirim saat jaringan membaik.',
+              'Jaringan minim/blankspot. Data ${_isEditing ? 'perubahan' : 'survei'} tersimpan di pending lokal dan akan disinkronkan saat jaringan membaik.',
           success: true,
         );
         return;
       }
 
-      final response = await apiProvider.submitSurvey(survey);
+      final response = await apiProvider.saveSurveyByVillageAndYear(
+        survey,
+        photo: _photo,
+        authToken: authToken,
+      );
+      if (_isEditing) {
+        if (!mounted) return;
+        await _showStatusDialog(
+          title: 'Perubahan Tersimpan',
+          message: response.message,
+          success: true,
+        );
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
+
       final savedSurvey = survey.copyWith(
         fotoLokasiSurvei: response.uploadedPhotoPath ?? survey.fotoLokasiSurvei,
       );
       await localProvider.addSurvey(savedSurvey);
 
       final syncResult = await localProvider.syncPendingSurveys(
-        apiProvider.submitSurvey,
+        (pendingSurvey) => apiProvider.saveSurveyByVillageAndYear(
+          pendingSurvey,
+          authToken: authToken,
+        ),
       );
 
       if (!mounted) {
         return;
       }
 
-        final syncSummary = syncResult.sent > 0
+      final syncSummary = syncResult.sent > 0
           ? '\n\nSinkronisasi pending: ${syncResult.sent} terkirim, ${syncResult.failed} gagal.'
           : '';
-        final successDetail =
-            'Data survey berhasil tersimpan ke server.\nTerima kasih, input kamu sudah masuk.$syncSummary';
+      final successDetail =
+          '${response.message}\nTerima kasih, input kamu sudah masuk.$syncSummary';
 
       await _showStatusDialog(
         title: 'Input Berhasil',
@@ -1232,6 +1602,20 @@ class _SurveyContentState extends State<SurveyContent> {
       _notesC.clear();
     } catch (e) {
       if (mounted) {
+        if (apiProvider.isRetryableNetworkError(e)) {
+          await localProvider.addPendingSurvey(survey);
+          if (!_isEditing) {
+            await localProvider.addSurvey(survey);
+          }
+          if (!mounted) return;
+          await _showStatusDialog(
+            title: 'Disimpan ke Pending Lokal',
+            message:
+                'Server belum dapat dijangkau. Data tersimpan di perangkat dan akan dicocokkan kembali berdasarkan kecamatan, desa, dan tahun saat sinkronisasi.',
+            success: true,
+          );
+          return;
+        }
         await _showStatusDialog(
           title: 'Gagal Mengirim Data',
           message: e.toString(),
@@ -1259,7 +1643,12 @@ class _SurveyContentState extends State<SurveyContent> {
       return;
     }
 
-    final result = await localProvider.syncPendingSurveys(apiProvider.submitSurvey);
+    final result = await localProvider.syncPendingSurveys(
+      (pendingSurvey) => apiProvider.saveSurveyByVillageAndYear(
+        pendingSurvey,
+        authToken: context.read<AuthProvider>().token,
+      ),
+    );
     if (!mounted) {
       return;
     }
@@ -1281,22 +1670,18 @@ class _SurveyContentState extends State<SurveyContent> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFEFF6FF),
-            Color(0xFFF8FAFC),
-            Color(0xFFECFEFF),
-          ],
+          colors: [Color(0xFFEFF6FF), Color(0xFFF8FAFC), Color(0xFFEFF6FF)],
         ),
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SurveyHeader(submitting: _submitting),
-              const SizedBox(height: 14),
+              _SurveyHeader(submitting: _submitting, isEditing: _isEditing),
+              const SizedBox(height: 10),
               _SectionCard(
                 title: 'Pending Upload',
                 icon: Icons.cloud_upload_outlined,
@@ -1319,8 +1704,12 @@ class _SurveyContentState extends State<SurveyContent> {
                                 ? 'Sinkronisasi...'
                                 : 'Sync Sekarang',
                             icon: Icons.sync_rounded,
-                            colors: const [Color(0xFF0EA5E9), Color(0xFF0369A1)],
-                            onTap: (_submitting || localProvider.isSyncingPending)
+                            colors: const [
+                              Color(0xFF0EA5E9),
+                              Color(0xFF0369A1),
+                            ],
+                            onTap:
+                                (_submitting || localProvider.isSyncingPending)
                                 ? null
                                 : _syncPendingNow,
                             loading: localProvider.isSyncingPending,
@@ -1331,7 +1720,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           child: _gradBtn(
                             label: 'Lihat Pending',
                             icon: Icons.format_list_bulleted_rounded,
-                            colors: const [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            colors: const [
+                              Color(0xFFF59E0B),
+                              Color(0xFFD97706),
+                            ],
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
@@ -1372,7 +1764,12 @@ class _SurveyContentState extends State<SurveyContent> {
                       initialValue: _selectedKecamatan,
                       decoration: _decoration('Kecamatan *'),
                       items: _baritoTimurArea.keys
-                          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                          .map(
+                            (e) => DropdownMenuItem<String>(
+                              value: e,
+                              child: Text(e),
+                            ),
+                          )
                           .toList(),
                       onChanged: (value) {
                         setState(() {
@@ -1380,17 +1777,24 @@ class _SurveyContentState extends State<SurveyContent> {
                           _selectedDesa = null;
                         });
                       },
-                      validator: (value) =>
-                          value == null || value.isEmpty ? 'Kecamatan wajib dipilih' : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Kecamatan wajib dipilih'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: _selectedDesa,
                       decoration: _decoration('Desa/Kelurahan *'),
                       items: desaOptions
-                          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                          .map(
+                            (e) => DropdownMenuItem<String>(
+                              value: e,
+                              child: Text(e),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (value) => setState(() => _selectedDesa = value),
+                      onChanged: (value) =>
+                          setState(() => _selectedDesa = value),
                       validator: (value) => value == null || value.isEmpty
                           ? 'Desa/Kelurahan wajib dipilih'
                           : null,
@@ -1401,7 +1805,9 @@ class _SurveyContentState extends State<SurveyContent> {
                         Expanded(
                           child: TextFormField(
                             controller: _latC,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             decoration: _decoration('Latitude *'),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
@@ -1418,7 +1824,9 @@ class _SurveyContentState extends State<SurveyContent> {
                         Expanded(
                           child: TextFormField(
                             controller: _longC,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             decoration: _decoration('Longitude *'),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
@@ -1437,7 +1845,7 @@ class _SurveyContentState extends State<SurveyContent> {
                     _gradBtn(
                       label: 'Ambil Lokasi Otomatis',
                       icon: Icons.my_location_rounded,
-                      colors: const [Color(0xFF059669), Color(0xFF0891B2)],
+                      colors: const [Color(0xFF2563EB), Color(0xFF1D4ED8)],
                       onTap: _getCurrentLocation,
                     ),
                     const SizedBox(height: 12),
@@ -1446,30 +1854,53 @@ class _SurveyContentState extends State<SurveyContent> {
                         Container(
                           width: 92,
                           height: 92,
+                          clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
                             color: const Color(0xFFE2E8F0),
                             borderRadius: BorderRadius.circular(10),
-                            image: _photo == null
-                                ? null
-                                : DecorationImage(
-                                    image: FileImage(_photo!),
-                                    fit: BoxFit.cover,
-                                  ),
                           ),
-                          child: _photo == null
-                              ? const Icon(Icons.camera_alt, color: Color(0xFF475569))
-                              : null,
+                          child: _photo != null
+                              ? Image.file(_photo!, fit: BoxFit.cover)
+                              : _existingSurveyPhotoUrl != null
+                              ? Image.network(
+                                  _existingSurveyPhotoUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.broken_image_outlined,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt,
+                                  color: Color(0xFF475569),
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _pickPhoto,
                             icon: const Icon(Icons.photo_camera),
-                            label: const Text('Ambil Foto Lokasi *'),
+                            label: Text(
+                              _isEditing
+                                  ? 'Ganti Foto Lokasi'
+                                  : 'Ambil Foto Lokasi *',
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    if (_isEditing && _photo == null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Foto tersimpan akan dipertahankan jika tidak diganti.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1485,7 +1916,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           : 'Ambil Otomatis Sinyal',
                       icon: Icons.signal_cellular_alt_rounded,
                       colors: const [Color(0xFF4F46E5), Color(0xFF2563EB)],
-                      onTap: (_submitting || _collectingMetrics)
+                      onTap:
+                          (_submitting ||
+                              _collectingMetrics ||
+                              _isBlankspot(_selectedJaringan))
                           ? null
                           : _collectSignalAutomatically,
                       loading: _collectingMetrics,
@@ -1506,7 +1940,10 @@ class _SurveyContentState extends State<SurveyContent> {
                     const SizedBox(height: 10),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 9,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(8),
@@ -1547,20 +1984,38 @@ class _SurveyContentState extends State<SurveyContent> {
                       initialValue: _selectedOperator,
                       decoration: _decoration('Operator *'),
                       items: _operatorOptions
-                          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                          .map(
+                            (e) => DropdownMenuItem<String>(
+                              value: e,
+                              child: Text(e),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (value) => setState(() => _selectedOperator = value),
-                      validator: (value) =>
-                          value == null || value.isEmpty ? 'Operator wajib dipilih' : null,
+                      onChanged: (value) =>
+                          setState(() => _selectedOperator = value),
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Operator wajib dipilih'
+                          : null,
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
                       initialValue: _selectedJaringan,
                       decoration: _decoration('Jenis Jaringan *'),
                       items: _jaringanOptions
-                          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                          .map(
+                            (e) => DropdownMenuItem<String>(
+                              value: e,
+                              child: Text(e),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (value) => setState(() => _selectedJaringan = value),
+                      onChanged: (value) => setState(() {
+                        _selectedJaringan = value;
+                        _signalCheckCompleted = false;
+                        if (_isBlankspot(value)) {
+                          _resetBlankspotMetrics();
+                        }
+                      }),
                       validator: (value) => value == null || value.isEmpty
                           ? 'Jenis jaringan wajib dipilih'
                           : null,
@@ -1569,7 +2024,11 @@ class _SurveyContentState extends State<SurveyContent> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 14, color: Color(0xFF0369A1)),
+                          const Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: Color(0xFF0369A1),
+                          ),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -1589,9 +2048,15 @@ class _SurveyContentState extends State<SurveyContent> {
                       children: [
                         Expanded(
                           child: TextFormField(
+                            key: ValueKey<bool>(
+                              _isBlankspot(_selectedJaringan),
+                            ),
                             controller: _rsrpC,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('RSRP'),
+                            decoration: _decoration(
+                              'RSRP',
+                              hint: _blankspotHint,
+                            ),
                             onChanged: (_) => setState(() {}),
                             validator: (value) {
                               final text = value?.trim() ?? '';
@@ -1614,7 +2079,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           child: TextFormField(
                             controller: _rsrqC,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('RSRQ'),
+                            decoration: _decoration(
+                              'RSRQ',
+                              hint: _blankspotHint,
+                            ),
                           ),
                         ),
                       ],
@@ -1626,7 +2094,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           child: TextFormField(
                             controller: _sinrC,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('SINR'),
+                            decoration: _decoration(
+                              'SINR',
+                              hint: _blankspotHint,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1634,7 +2105,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           child: TextFormField(
                             controller: _rssiC,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('RSSI'),
+                            decoration: _decoration(
+                              'RSSI',
+                              hint: _blankspotHint,
+                            ),
                           ),
                         ),
                       ],
@@ -1648,7 +2122,10 @@ class _SurveyContentState extends State<SurveyContent> {
                           : 'Mulai Speedtest',
                       icon: Icons.speed_rounded,
                       colors: const [Color(0xFF7C3AED), Color(0xFF5B21B6)],
-                      onTap: (_submitting || _collectingMetrics)
+                      onTap:
+                          (_submitting ||
+                              _collectingMetrics ||
+                              _isBlankspot(_selectedJaringan))
                           ? null
                           : _startSpeedTestWithPopup,
                       loading: _collectingMetrics,
@@ -1659,16 +2136,26 @@ class _SurveyContentState extends State<SurveyContent> {
                         Expanded(
                           child: TextFormField(
                             controller: _downloadC,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _decoration('Download Speed (Mbps)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: _decoration(
+                              'Download Speed (Mbps)',
+                              hint: _blankspotHint,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
                             controller: _uploadC,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: _decoration('Upload Speed (Mbps)'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: _decoration(
+                              'Upload Speed (Mbps)',
+                              hint: _blankspotHint,
+                            ),
                           ),
                         ),
                       ],
@@ -1677,7 +2164,10 @@ class _SurveyContentState extends State<SurveyContent> {
                     TextFormField(
                       controller: _pingC,
                       keyboardType: TextInputType.number,
-                      decoration: _decoration('Ping (ms)'),
+                      decoration: _decoration(
+                        'Ping (ms)',
+                        hint: _blankspotHint,
+                      ),
                       validator: (value) {
                         final text = value?.trim() ?? '';
                         if (text.isEmpty) {
@@ -1721,7 +2211,13 @@ class _SurveyContentState extends State<SurveyContent> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.save),
-                  label: Text(_submitting ? 'Mengirim...' : 'Cek & Kirim ke Database'),
+                  label: Text(
+                    _submitting
+                        ? 'Menyimpan...'
+                        : _isEditing
+                        ? 'Simpan Perubahan'
+                        : 'Cek & Kirim ke Database',
+                  ),
                 ),
               ),
             ],
@@ -1743,10 +2239,10 @@ class _SpeedTestDialog extends StatefulWidget {
 
 class _SpeedTestDialogState extends State<_SpeedTestDialog> {
   bool _running = true;
-  double _progress = 0;
   String _stageLabel = 'Persiapan';
   SpeedMetrics? _result;
   SpeedTestStage? _currentStage;
+  double? _liveSpeedMbps;
 
   int _stageNumber(SpeedTestStage stage) {
     return switch (stage) {
@@ -1764,7 +2260,7 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
     };
   }
 
-  Future<void> _applyStageProgress(SpeedTestStage stage, double percent) async {
+  Future<void> _applyStageProgress(SpeedTestStage stage, double _) async {
     if (!mounted) {
       return;
     }
@@ -1774,7 +2270,7 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
       setState(() {
         _currentStage = stage;
         _stageLabel = '${_stageText(stage)} (${_stageNumber(stage)}/3)';
-        _progress = 0;
+        _liveSpeedMbps = null;
       });
 
       // Small delay so users can see the bar restart on each stage.
@@ -1786,7 +2282,6 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
 
     setState(() {
       _stageLabel = '${_stageText(stage)} (${_stageNumber(stage)}/3)';
-      _progress = (percent / 100.0).clamp(0.0, 1.0);
     });
   }
 
@@ -1806,6 +2301,10 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
 
           _applyStageProgress(stage, percent);
         },
+        onSpeedUpdate: (stage, speedMbps) {
+          if (!mounted) return;
+          setState(() => _liveSpeedMbps = speedMbps);
+        },
       );
 
       if (!mounted) {
@@ -1816,7 +2315,6 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
         _result = result;
         _running = false;
         _stageLabel = 'Selesai';
-        _progress = 1;
         _currentStage = null;
       });
     } catch (_) {
@@ -1842,127 +2340,387 @@ class _SpeedTestDialogState extends State<_SpeedTestDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Speedtest'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 140,
-                  height: 140,
-                  child: CircularProgressIndicator(
-                    value: _progress,
-                    strokeWidth: 10,
-                    backgroundColor: const Color(0xFFE2E8F0),
+    final isDownload = _currentStage == SpeedTestStage.download;
+    final isUpload = _currentStage == SpeedTestStage.upload;
+    final liveSpeed = _running ? (_liveSpeedMbps ?? 0) : 0.0;
+    final displaySpeed = isDownload || isUpload
+        ? liveSpeed
+        : _result?.downloadMbps ?? 0;
+    final speedColor = isUpload
+        ? const Color(0xFFD45CFF)
+        : const Color(0xFF00D8D0);
+    final downloadValue = isDownload && _running
+        ? '${liveSpeed.toStringAsFixed(2)} Mbps'
+        : '${_fmt(_result?.downloadMbps)} Mbps';
+    final uploadValue = isUpload && _running
+        ? '${liveSpeed.toStringAsFixed(2)} Mbps'
+        : '${_fmt(_result?.uploadMbps)} Mbps';
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 560),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _SpeedSummary(
+                      label: 'UNDUHAN',
+                      value: downloadValue,
+                      color: const Color(0xFF00D8D0),
+                      icon: Icons.arrow_downward_rounded,
+                    ),
                   ),
-                ),
-                Column(
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SpeedSummary(
+                      label: 'UNGGAHAN',
+                      value: uploadValue,
+                      color: const Color(0xFFD45CFF),
+                      icon: Icons.arrow_upward_rounded,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.bolt_rounded,
+                    color: Color(0xFFFFD000),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Ping  ${_result?.pingMs?.toString() ?? '--'} ms',
+                    style: const TextStyle(color: Color(0xFFE7E7E7)),
+                  ),
+                  const SizedBox(width: 18),
+                  Icon(
+                    Icons.arrow_downward_rounded,
+                    color: const Color(0xFF00D8D0),
+                    size: 17,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _result?.downloadMbps?.toStringAsFixed(0) ?? '--',
+                    style: const TextStyle(color: Color(0xFFE7E7E7)),
+                  ),
+                  const SizedBox(width: 14),
+                  const Icon(
+                    Icons.arrow_upward_rounded,
+                    color: Color(0xFFD45CFF),
+                    size: 17,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _result?.uploadMbps?.toStringAsFixed(0) ?? '--',
+                    style: const TextStyle(color: Color(0xFFE7E7E7)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  _SpeedFeatureIcon(icon: Icons.language_rounded),
+                  SizedBox(width: 20),
+                  _SpeedFeatureIcon(icon: Icons.sports_esports_rounded),
+                  SizedBox(width: 20),
+                  _SpeedFeatureIcon(icon: Icons.smart_display_rounded),
+                  SizedBox(width: 20),
+                  _SpeedFeatureIcon(icon: Icons.video_camera_front_rounded),
+                ],
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                height: 270,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Text(
-                      '${(_progress * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
+                    CustomPaint(
+                      size: const Size(320, 270),
+                      painter: _SpeedGaugePainter(
+                        speedMbps: displaySpeed,
+                        color: speedColor,
                       ),
                     ),
-                    Text(
-                      _stageLabel,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: Color(0xFF475569),
+                    Positioned(
+                      bottom: 7,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            (isDownload || isUpload) && _running
+                                ? liveSpeed.toStringAsFixed(2)
+                                : _fmt(_result?.downloadMbps),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w300,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Icon(
+                                isUpload
+                                    ? Icons.arrow_upward_rounded
+                                    : Icons.arrow_downward_rounded,
+                                color: speedColor,
+                                size: 17,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                isUpload ? 'Mbps • Unggahan' : 'Mbps • Unduhan',
+                                style: const TextStyle(
+                                  color: Color(0xFF8B8B9A),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _running ? _stageLabel : 'Selesai',
+                style: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13),
+              ),
+              if (!_running &&
+                  _result?.downloadMbps == null &&
+                  _result?.downloadError != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Download gagal: ${_result!.downloadError}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFFF8A8A),
+                    fontSize: 12,
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 14),
-            _DetailItem(
-              label: 'Download',
-              value: '${_fmt(_result?.downloadMbps)} Mbps',
-            ),
-            _DetailItem(
-              label: 'Upload',
-              value: '${_fmt(_result?.uploadMbps)} Mbps',
-            ),
-            _DetailItem(
-              label: 'Ping',
-              value: _result?.pingMs == null ? '-' : '${_result!.pingMs} ms',
+              if (!_running &&
+                  _result?.uploadMbps == null &&
+                  _result?.uploadError != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Upload gagal: ${_result!.uploadError}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFFFF8A8A),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: _running
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF35416C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _running
+                          ? null
+                          : () => Navigator.of(context).pop(_result),
+                      child: const Text('Gunakan hasil'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedSummary extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+
+  const _SpeedSummary({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontSize: 12),
+              ),
             ),
           ],
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _running ? null : () => Navigator.of(context).pop(),
-          child: const Text('Tutup'),
-        ),
-        FilledButton(
-          onPressed: _running ? null : () => Navigator.of(context).pop(_result),
-          child: const Text('Gunakan Hasil'),
+        const SizedBox(height: 3),
+        FittedBox(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w300,
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-class _DetailItem extends StatelessWidget {
-  final String label;
-  final String value;
+class _SpeedFeatureIcon extends StatelessWidget {
+  final IconData icon;
 
-  const _DetailItem({
-    required this.label,
-    required this.value,
-  });
+  const _SpeedFeatureIcon({required this.icon});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: Color(0xFF64748B),
-              ),
-            ),
+  Widget build(BuildContext context) =>
+      Icon(icon, color: const Color(0xFF777887), size: 27);
+}
+
+class _SpeedGaugePainter extends CustomPainter {
+  final double speedMbps;
+  final Color color;
+
+  const _SpeedGaugePainter({required this.speedMbps, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const startAngle = 3 * math.pi / 4;
+    const sweepAngle = 3 * math.pi / 2;
+    final center = Offset(size.width / 2, size.height * .69);
+    final radius = math.min(size.width * .43, size.height * .53);
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 20
+      ..strokeCap = StrokeCap.butt
+      ..color = const Color(0xFF292B42);
+    canvas.drawArc(rect, startAngle, sweepAngle, false, track);
+
+    final normalized = (math.log(speedMbps.clamp(0, 1000) + 1) / math.log(1001))
+        .clamp(0.0, 1.0);
+    if (normalized > 0) {
+      final active = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 20
+        ..strokeCap = StrokeCap.butt
+        ..color = color;
+      canvas.drawArc(rect, startAngle, sweepAngle * normalized, false, active);
+    }
+
+    const labels = <(String, double)>[
+      ('0', 0),
+      ('5', 5),
+      ('10', 10),
+      ('50', 50),
+      ('100', 100),
+      ('250', 250),
+      ('500', 500),
+      ('750', 750),
+      ('1000', 1000),
+    ];
+    for (final (label, value) in labels) {
+      final position = math.log(value + 1) / math.log(1001);
+      final angle = startAngle + sweepAngle * position;
+      final point = Offset(
+        center.dx + math.cos(angle) * (radius - 34),
+        center.dy + math.sin(angle) * (radius - 34),
+      );
+      final text = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            color: value == 0 || value == 5 || value == 10
+                ? Colors.white
+                : const Color(0xFF666879),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
           ),
-          const Text(': '),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas, point - Offset(text.width / 2, text.height / 2));
+    }
+
+    final needleAngle = startAngle + sweepAngle * normalized;
+    final needleEnd = Offset(
+      center.dx + math.cos(needleAngle) * (radius - 42),
+      center.dy + math.sin(needleAngle) * (radius - 42),
     );
+    canvas.drawLine(
+      center,
+      needleEnd,
+      Paint()
+        ..color = Colors.white.withOpacity(.75)
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(center, 7, Paint()..color = const Color(0xFFB9BBC8));
   }
+
+  @override
+  bool shouldRepaint(covariant _SpeedGaugePainter oldDelegate) =>
+      oldDelegate.speedMbps != speedMbps || oldDelegate.color != color;
 }
 
 class _SurveyHeader extends StatelessWidget {
   final bool submitting;
+  final bool isEditing;
 
-  const _SurveyHeader({required this.submitting});
+  const _SurveyHeader({required this.submitting, required this.isEditing});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0EA5E9), Color(0xFF2563EB)],
@@ -1979,8 +2737,8 @@ class _SurveyHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(35),
               borderRadius: BorderRadius.circular(12),
@@ -1992,23 +2750,22 @@ class _SurveyHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Input Survey Jaringan',
+                Text(
+                  isEditing ? 'Edit Survey Jaringan' : 'Input Survey Jaringan',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   submitting
-                      ? 'Mengirim data ke server...'
+                      ? 'Menyimpan perubahan ke server...'
+                      : isEditing
+                      ? 'Perbarui data survey yang tersimpan'
                       : 'Isi data inti, lalu kirim atau simpan pending',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 11.5),
                 ),
               ],
             ),
@@ -2034,7 +2791,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(240),
         borderRadius: BorderRadius.circular(14),
@@ -2073,13 +2830,17 @@ class _SectionCard extends StatelessWidget {
 
 class SurveyPage extends StatelessWidget {
   static const routeName = '/survey';
-  const SurveyPage({super.key});
+  final Survey? initialSurvey;
+
+  const SurveyPage({super.key, this.initialSurvey});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Survey Jaringan')),
-      body: const SurveyContent(),
+      appBar: AppBar(
+        title: Text(initialSurvey == null ? 'Survey Jaringan' : 'Edit Survey'),
+      ),
+      body: SurveyContent(initialSurvey: initialSurvey),
     );
   }
 }

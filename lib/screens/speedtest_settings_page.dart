@@ -223,7 +223,7 @@ class _SpeedtestSettingsPageState extends State<SpeedtestSettingsPage> {
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      'Catatan: endpoint harus aktif dan stabil. Nilai bytes menentukan besar payload test (semakin besar biasanya hasil lebih stabil, tapi lebih lama).',
+                      'Unduhan diuji selama 6–10 detik per putaran dengan dua koneksi. Ukuran permintaan minimal 50 MB per koneksi agar transfer berlangsung selama tes. Download URL harus mengirim data biner langsung (HTTP 200), bisa diakses tanpa login, dan mendukung GET berulang. Gunakan server yang dekat dengan lokasi pengujian untuk hasil yang lebih relevan.',
                       style: TextStyle(
                         color: Color(0xFF64748B),
                         fontSize: 12.5,

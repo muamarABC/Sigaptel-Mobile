@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
-import '../config/app_config.dart';
 import '../models/remote_survey.dart';
 import '../models/survey.dart';
 
 class ApiSurveyProvider with ChangeNotifier {
+  static const String _baseUrl =
+      'https://tower.baritotimurkab.go.id/api/survei';
+
   List<RemoteSurvey> _surveys = [];
   RemoteSurvey? _selected;
   bool _isSubmitting = false;
@@ -32,12 +35,9 @@ class ApiSurveyProvider with ChangeNotifier {
     notifyListeners();
     try {
       final fields = survey.toApiPayload();
-      final request = http.MultipartRequest(
-        'POST',
-        AppConfig.apiUri('/api/survei'),
-      );
+      final request = http.MultipartRequest('POST', Uri.parse(_baseUrl));
       request.fields.addAll(fields);
-      request.headers.addAll(AppConfig.authHeaders());
+      request.headers['Accept'] = 'application/json';
       // Guard: photo must only be sent as multipart file, never as plain text.
       request.fields.remove('foto_lokasi_survei');
       request.fields.remove('foto');
@@ -119,6 +119,171 @@ class ApiSurveyProvider with ChangeNotifier {
     }
   }
 
+  /// Update the existing record for a village in a survey year, or create it
+  /// when no record matches. Kecamatan is included to avoid collisions between
+  /// villages that share the same name.
+  Future<SubmitSurveyResult> saveSurveyByVillageAndYear(
+    Survey survey, {
+    File? photo,
+    String? authToken,
+  }) async {
+    if (survey.id != null) {
+      return updateSurvey(survey, photo: photo, authToken: authToken);
+    }
+
+    final year = int.tryParse(survey.tahunSurvei.trim());
+    if (year == null) {
+      throw ArgumentError('Tahun survei tidak valid.');
+    }
+
+    final existingSurveys = await fetchSurveysByYear(year: year);
+    final match =
+        existingSurveys
+            .where(
+              (remote) =>
+                  remote.id > 0 &&
+                  _normalizeSurveyKeyPart(remote.kecamatan) ==
+                      _normalizeSurveyKeyPart(survey.kecamatan) &&
+                  _normalizeSurveyKeyPart(remote.desa) ==
+                      _normalizeSurveyKeyPart(survey.desa) &&
+                  remote.tahunSurvei.trim() == survey.tahunSurvei.trim(),
+            )
+            .toList()
+          ..sort((a, b) => b.id.compareTo(a.id));
+
+    if (match.isEmpty) {
+      return submitSurvey(survey);
+    }
+
+    // Existing photo stays on the server; updateSurvey currently supports
+    // updating survey fields but does not upload a replacement photo.
+    return updateSurvey(
+      survey.copyWith(id: match.first.id),
+      authToken: authToken,
+    );
+  }
+
+  bool isRetryableNetworkError(Object error) {
+    if (error is SocketException ||
+        error is TimeoutException ||
+        error is http.ClientException) {
+      return true;
+    }
+    return RegExp(
+      r'\b(?:HTTP\s*)?(408|425|429|5\d\d)\b',
+    ).hasMatch(error.toString());
+  }
+
+  String _normalizeSurveyKeyPart(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  Future<SubmitSurveyResult> updateSurvey(
+    Survey survey, {
+    File? photo,
+    String? authToken,
+  }) async {
+    final id = survey.id;
+    if (id == null) {
+      throw ArgumentError('ID survey wajib tersedia untuk update.');
+    }
+
+    _isSubmitting = true;
+    notifyListeners();
+    try {
+      if (photo != null) {
+        throw UnsupportedError(
+          'API update saat ini belum memproses penggantian foto. Foto lama tetap dipertahankan; ubah data tanpa memilih foto baru.',
+        );
+      }
+
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (authToken != null && authToken.trim().isNotEmpty) {
+        headers['Authorization'] = 'Bearer ${authToken.trim()}';
+      }
+      final fields = survey.toApiPayload()..['_method'] = 'PUT';
+      if (survey.jaringan.trim().toLowerCase() == 'blankspot') {
+        for (final field in [
+          'rsrp',
+          'rsrq',
+          'sinr',
+          'rssi',
+          'download_speed',
+          'upload_speed',
+          'ping',
+        ]) {
+          fields[field] = '';
+        }
+      }
+      final response = await http.post(
+        Uri.parse('$_baseUrl/$id'),
+        headers: headers,
+        body: fields,
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(_updateErrorMessage(response));
+      }
+      return _extractUpdateResult(response.body);
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  String _updateErrorMessage(http.Response response) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final message = decoded['message']?.toString().trim();
+        if (message != null && message.isNotEmpty) return message;
+
+        final errors = decoded['errors'];
+        if (errors is Map && errors.isNotEmpty) {
+          final firstError = errors.values.first;
+          if (firstError is List && firstError.isNotEmpty) {
+            return firstError.first.toString();
+          }
+          if (firstError != null) return firstError.toString();
+        }
+      }
+    } catch (_) {
+      // Keep HTML/server traces out of the user-facing dialog.
+    }
+    if (response.statusCode == 403) {
+      final bodyExcerpt = response.body
+          .replaceAll(RegExp(r'<[^>]*>'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (bodyExcerpt.isNotEmpty) {
+        final safeExcerpt = bodyExcerpt.length > 220
+            ? '${bodyExcerpt.substring(0, 220)}...'
+            : bodyExcerpt;
+        return 'Akses update ditolak server (403): $safeExcerpt';
+      }
+      return 'Akses update ditolak server (403). Pastikan sesi login dan izin akun.';
+    }
+    return 'Gagal memperbarui survei (HTTP ${response.statusCode}).';
+  }
+
+  SubmitSurveyResult _extractUpdateResult(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final message = decoded['message']?.toString().trim();
+        return SubmitSurveyResult(
+          message: message == null || message.isEmpty
+              ? 'Data survei berhasil diperbarui.'
+              : message,
+          rawBody: body,
+        );
+      }
+    } catch (_) {
+      // Fall back to the generic update confirmation below.
+    }
+    return const SubmitSurveyResult(
+      message: 'Data survei berhasil diperbarui.',
+    );
+  }
+
   MediaType _detectImageContentType(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.png')) {
@@ -177,8 +342,8 @@ class ApiSurveyProvider with ChangeNotifier {
     }
 
     try {
-      final uri = AppConfig.apiUri('/api/survei/$id');
-      final resp = await http.get(uri, headers: AppConfig.authHeaders());
+      final uri = Uri.parse('$_baseUrl/$id');
+      final resp = await http.get(uri);
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         return initial;
       }
@@ -316,7 +481,8 @@ class ApiSurveyProvider with ChangeNotifier {
     try {
       final decoded = jsonDecode(body);
       if (decoded is Map<String, dynamic>) {
-        final message = decoded['message'] ?? decoded['msg'] ?? decoded['status'];
+        final message =
+            decoded['message'] ?? decoded['msg'] ?? decoded['status'];
         if (message != null && message.toString().trim().isNotEmpty) {
           return message.toString();
         }
@@ -330,11 +496,10 @@ class ApiSurveyProvider with ChangeNotifier {
 
   Future<void> loadSurveys({int? tahun}) async {
     try {
-      final uri = AppConfig.apiUri(
-        '/api/survei',
+      final uri = Uri.parse(_baseUrl).replace(
         queryParameters: tahun != null ? {'tahun': tahun.toString()} : null,
       );
-      final resp = await http.get(uri, headers: AppConfig.authHeaders());
+      final resp = await http.get(uri);
       if (resp.statusCode == 200) {
         final dynamic decoded = jsonDecode(resp.body);
         final List<dynamic> list = _extractListPayload(decoded);
@@ -358,8 +523,8 @@ class ApiSurveyProvider with ChangeNotifier {
 
   Future<List<int>> fetchAvailableSurveyYears() async {
     try {
-      final uri = AppConfig.apiUri('/api/survei/tahun');
-      final resp = await http.get(uri, headers: AppConfig.authHeaders());
+      final uri = Uri.parse('$_baseUrl/tahun');
+      final resp = await http.get(uri);
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final dynamic decoded = jsonDecode(resp.body);
         final years = _extractYearListPayload(decoded);
@@ -385,8 +550,8 @@ class ApiSurveyProvider with ChangeNotifier {
 
   Future<void> loadDetail(int id) async {
     try {
-      final uri = AppConfig.apiUri('/api/survei/$id');
-      final resp = await http.get(uri, headers: AppConfig.authHeaders());
+      final uri = Uri.parse('$_baseUrl/$id');
+      final resp = await http.get(uri);
       if (resp.statusCode == 200) {
         final dynamic decoded = jsonDecode(resp.body);
         final Map<String, dynamic> json = _extractMapPayload(decoded);
@@ -449,11 +614,7 @@ class ApiSurveyProvider with ChangeNotifier {
         }
         if (item is Map) {
           final map = Map<String, dynamic>.from(item);
-          final candidates = [
-            map['tahun'],
-            map['year'],
-            map['tahun_survei'],
-          ];
+          final candidates = [map['tahun'], map['year'], map['tahun_survei']];
           for (final c in candidates) {
             final parsed = int.tryParse(c?.toString() ?? '');
             if (parsed != null) {

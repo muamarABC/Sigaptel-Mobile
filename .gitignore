@@ -33,9 +33,10 @@ migrate_working_dir/
 /build/
 **/build/
 /coverage/
-env/*.json
-!env/example.json
+env/local.json
 .vscode/.dart-define.generated.json
+.github/modernize/assessment/reports/
+third_party/image_gallery_saver/example/
 .github/appmod/assessment/reports/
 
 # Symbolication related

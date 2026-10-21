@@ -15,7 +15,8 @@ class SurveyProvider with ChangeNotifier {
   bool _isSyncingPending = false;
 
   List<Survey> get surveys => List.unmodifiable(_surveys);
-  List<PendingSurveyItem> get pendingSurveys => List.unmodifiable(_pendingSurveys);
+  List<PendingSurveyItem> get pendingSurveys =>
+      List.unmodifiable(_pendingSurveys);
   int get pendingCount => _pendingSurveys.length;
   bool get isSyncingPending => _isSyncingPending;
 
@@ -30,10 +31,31 @@ class SurveyProvider with ChangeNotifier {
   }
 
   Future<void> addPendingSurvey(Survey s) async {
+    String normalize(String value) =>
+        value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+    final matching = _pendingSurveys.where((item) {
+      final old = item.survey;
+      return normalize(old.kecamatan) == normalize(s.kecamatan) &&
+          normalize(old.desa) == normalize(s.desa) &&
+          old.tahunSurvei.trim() == s.tahunSurvei.trim();
+    }).toList();
+
+    int? existingId;
+    for (final item in matching) {
+      if (item.survey.id != null) {
+        existingId = item.survey.id;
+        break;
+      }
+    }
+    final surveyToSave = s.id == null && existingId != null
+        ? s.copyWith(id: existingId)
+        : s;
+    _pendingSurveys.removeWhere((item) => matching.contains(item));
     _pendingSurveys.add(
       PendingSurveyItem(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
-        survey: s,
+        survey: surveyToSave,
         createdAt: DateTime.now(),
       ),
     );
@@ -112,7 +134,9 @@ class SurveyProvider with ChangeNotifier {
       _pendingSurveys
         ..clear()
         ..addAll(
-          list.map((e) => PendingSurveyItem.fromJson(e as Map<String, dynamic>)),
+          list.map(
+            (e) => PendingSurveyItem.fromJson(e as Map<String, dynamic>),
+          ),
         );
       notifyListeners();
     }
@@ -126,7 +150,9 @@ class SurveyProvider with ChangeNotifier {
 
   Future<void> _savePending() async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = jsonEncode(_pendingSurveys.map((s) => s.toJson()).toList());
+    final jsonString = jsonEncode(
+      _pendingSurveys.map((s) => s.toJson()).toList(),
+    );
     await prefs.setString(_pendingStorageKey, jsonString);
   }
 }
@@ -163,18 +189,19 @@ class PendingSurveyItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'survey': survey.toJson(),
-        'created_at': createdAt.toIso8601String(),
-        'retry_count': retryCount,
-        'last_error': lastError,
-      };
+    'id': id,
+    'survey': survey.toJson(),
+    'created_at': createdAt.toIso8601String(),
+    'retry_count': retryCount,
+    'last_error': lastError,
+  };
 
   factory PendingSurveyItem.fromJson(Map<String, dynamic> json) {
     return PendingSurveyItem(
       id: (json['id'] ?? '').toString(),
       survey: Survey.fromJson(Map<String, dynamic>.from(json['survey'] as Map)),
-      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()) ??
+      createdAt:
+          DateTime.tryParse((json['created_at'] ?? '').toString()) ??
           DateTime.now(),
       retryCount: (json['retry_count'] as int?) ?? 0,
       lastError: json['last_error']?.toString(),

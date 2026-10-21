@@ -1,19 +1,58 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-import '../config/app_config.dart';
 import '../models/remote_survey.dart';
+import '../models/survey.dart';
 import '../providers/api_survey_provider.dart';
+import '../services/photo_stamp_service.dart';
+import 'survey_page.dart';
 
-class SurveyDetailPage extends StatelessWidget {
+class SurveyDetailPage extends StatefulWidget {
   static const routeName = '/survey-detail';
   const SurveyDetailPage({super.key});
+
+  @override
+  State<SurveyDetailPage> createState() => _SurveyDetailPageState();
+}
+
+class _SurveyDetailPageState extends State<SurveyDetailPage> {
+  Future<void>? _loadFuture;
+  int? _surveyId;
+
+  Survey _toEditableSurvey(RemoteSurvey remote) => Survey(
+    id: remote.id,
+    userId: remote.userId,
+    kecamatan: remote.kecamatan,
+    desa: remote.desa,
+    date: DateTime.tryParse(remote.createdAt) ?? DateTime.now(),
+    latitude: double.tryParse(remote.latitude) ?? 0,
+    longitude: double.tryParse(remote.longitude) ?? 0,
+    operatorName: remote.operator,
+    rsrp: remote.rsrp,
+    rsrq: remote.rsrq,
+    sinr: remote.sinr,
+    rssi: remote.rssi,
+    downloadSpeed: remote.downloadSpeed,
+    uploadSpeed: remote.uploadSpeed,
+    ping: remote.ping,
+    tahunSurvei: remote.tahunSurvei,
+    revisiKe: remote.revisiKe,
+    isAktif: remote.isAktif,
+    parentId: remote.parentId,
+    jaringan: remote.jaringan,
+    kekuatanSinyal: remote.kekuatanSinyal,
+    fotoLokasiSurvei: remote.fotoLokasiSurvei,
+    notes: remote.notes,
+  );
 
   bool _isTemporaryUploadPath(String raw) {
     final trimmed = raw.trim();
@@ -41,7 +80,7 @@ class SurveyDetailPage extends StatelessWidget {
       normalized = normalized.substring('storage/'.length);
     }
 
-    return AppConfig.storageUrl(normalized);
+    return 'https://tower.baritotimurkab.go.id/storage/$normalized';
   }
 
   LatLng? _parseCoordinate(RemoteSurvey survey) {
@@ -56,12 +95,22 @@ class SurveyDetailPage extends StatelessWidget {
     return LatLng(lat, lng);
   }
 
-  String _buildDownloadFileName(RemoteSurvey survey, String url) {
-    final desa = survey.desa.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
-    final cleanDesa = desa.replaceAll(RegExp(r'-+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+  String _buildDownloadFileName(
+    RemoteSurvey survey,
+    String url, {
+    String? desa,
+  }) {
+    final village = (desa ?? survey.desa).trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '-',
+    );
+    final cleanDesa = village
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
     final uri = Uri.tryParse(url);
-    final lastSegment =
-        (uri != null && uri.pathSegments.isNotEmpty) ? uri.pathSegments.last : '';
+    final lastSegment = (uri != null && uri.pathSegments.isNotEmpty)
+        ? uri.pathSegments.last
+        : '';
 
     String extension = 'jpg';
     if (lastSegment.contains('.')) {
@@ -73,45 +122,281 @@ class SurveyDetailPage extends StatelessWidget {
     return '${prefix}_$ts.$extension';
   }
 
-  Future<void> _downloadPhoto(BuildContext context, RemoteSurvey survey) async {
+  Future<bool> _requestGalleryPermission() async {
+    if (Platform.isAndroid) {
+      // On modern Android (scoped storage), gallery save can work without
+      // runtime storage permission. Don't block save flow by permission check.
+      return true;
+    }
+
+    if (Platform.isIOS) {
+      final photosAddStatus = await Permission.photosAddOnly.request();
+      if (photosAddStatus.isGranted || photosAddStatus.isLimited) {
+        return true;
+      }
+
+      final photosStatus = await Permission.photos.request();
+      return photosStatus.isGranted || photosStatus.isLimited;
+    }
+
+    return true;
+  }
+
+  bool _isGallerySaveSuccess(dynamic result) {
+    if (result is Map) {
+      final dynamic successRaw = result['isSuccess'] ?? result['success'];
+      if (successRaw is bool) {
+        return successRaw;
+      }
+      if (successRaw is num) {
+        return successRaw != 0;
+      }
+      if (successRaw != null) {
+        final text = successRaw.toString().toLowerCase();
+        if (text == 'true' || text == '1') {
+          return true;
+        }
+      }
+      final dynamic filePath = result['filePath'];
+      if (filePath != null && filePath.toString().isNotEmpty) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String _staffName(RemoteSurvey survey) => survey.namaPembuat.trim().isNotEmpty
+      ? survey.namaPembuat.trim()
+      : survey.userId > 0
+      ? 'User ID ${survey.userId}'
+      : '-';
+
+  Future<Uint8List> _loadStampedPhoto(
+    RemoteSurvey survey, {
+    DateTime? timestamp,
+    String? desa,
+    String? locationPrefix,
+  }) async {
+    final url = _buildPhotoUrl(survey.fotoLokasiSurvei);
+    if (url.isEmpty) {
+      throw Exception('Foto tidak bisa dimuat karena path tidak valid.');
+    }
+
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Gagal memuat foto (HTTP ${response.statusCode}).');
+    }
+
+    return PhotoStampService.stamp(
+      photoBytes: response.bodyBytes,
+      timestamp: timestamp ?? DateTime.tryParse(survey.createdAt),
+      desa: desa ?? survey.desa,
+      kecamatan: survey.kecamatan,
+      locationPrefix: locationPrefix ?? '',
+      latitude: survey.latitude,
+      longitude: survey.longitude,
+      staffName: _staffName(survey),
+    );
+  }
+
+  Future<void> _openStampedPhoto(RemoteSurvey survey) async {
+    final url = _buildPhotoUrl(survey.fotoLokasiSurvei);
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto tidak bisa dibuka karena path tidak valid.'),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _WatermarkedPhotoViewer(
+          title: survey.desa.trim().isEmpty ? 'Foto Survei' : survey.desa,
+          photoFuture: _loadStampedPhoto(survey),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editWatermarkAndDownload(RemoteSurvey survey) async {
+    final createdAt = DateTime.tryParse(survey.createdAt);
+    final initialWib =
+        createdAt?.toUtc().add(const Duration(hours: 7)) ??
+        DateTime.now().toUtc().add(const Duration(hours: 7));
+    final metadata = await showModalBottomSheet<_StampMetadata>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WatermarkMetadataEditor(
+        initialTimestamp: initialWib,
+        initialVillage: survey.desa,
+      ),
+    );
+    if (metadata != null && mounted) {
+      await _downloadPhoto(
+        context,
+        survey,
+        timestamp: metadata.timestamp,
+        desa: metadata.village,
+        locationPrefix: metadata.locationPrefix,
+      );
+    }
+  }
+
+  Future<void> _watermarkGalleryPhoto(RemoteSurvey survey) async {
+    try {
+      final pickedPhoto = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+      );
+      if (pickedPhoto == null || !mounted) return;
+
+      final createdAt = DateTime.tryParse(survey.createdAt);
+      final initialWib =
+          createdAt?.toUtc().add(const Duration(hours: 7)) ??
+          DateTime.now().toUtc().add(const Duration(hours: 7));
+      final metadata = await showModalBottomSheet<_StampMetadata>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _WatermarkMetadataEditor(
+          initialTimestamp: initialWib,
+          initialVillage: survey.desa,
+        ),
+      );
+      if (metadata == null || !mounted) return;
+
+      final stampedBytes = await PhotoStampService.stamp(
+        photoBytes: await pickedPhoto.readAsBytes(),
+        timestamp: metadata.timestamp,
+        desa: metadata.village,
+        kecamatan: survey.kecamatan,
+        locationPrefix: metadata.locationPrefix,
+        latitude: survey.latitude,
+        longitude: survey.longitude,
+        staffName: _staffName(survey),
+      );
+      if (!context.mounted) return;
+      final fileName = _buildDownloadFileName(
+        survey,
+        pickedPhoto.name,
+        desa: metadata.village,
+      );
+      final baseName = fileName.substring(0, fileName.lastIndexOf('.'));
+      final saved = await _saveWatermarkedBytes(
+        context,
+        stampedBytes,
+        baseName,
+      );
+      if (saved && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Foto galeri ber-watermark tersimpan ke galeri.'),
+          ),
+        );
+      }
+    } on MissingPluginException {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Fitur galeri belum aktif. Tutup aplikasi lalu jalankan ulang.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal memberi watermark: $e')));
+    }
+  }
+
+  Future<bool> _saveWatermarkedBytes(
+    BuildContext context,
+    Uint8List bytes,
+    String baseName,
+  ) async {
+    final granted = await _requestGalleryPermission();
+    if (!granted) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Izin akses foto ditolak. Aktifkan izin untuk menyimpan gambar.',
+            ),
+            action: SnackBarAction(
+              label: 'Pengaturan',
+              onPressed: openAppSettings,
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final result = await ImageGallerySaver.saveImage(
+      bytes,
+      name: baseName,
+      quality: 100,
+    );
+    if (!_isGallerySaveSuccess(result)) {
+      throw Exception('Plugin galeri gagal menyimpan foto.');
+    }
+    return true;
+  }
+
+  Future<void> _downloadPhoto(
+    BuildContext context,
+    RemoteSurvey survey, {
+    DateTime? timestamp,
+    String? desa,
+    String? locationPrefix,
+  }) async {
     final raw = survey.fotoLokasiSurvei;
     final url = _buildPhotoUrl(raw);
     if (url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto tidak bisa diunduh karena path tidak valid.')),
+        const SnackBar(
+          content: Text('Foto tidak bisa diunduh karena path tidak valid.'),
+        ),
       );
       return;
     }
 
     try {
-      final resp = await http.get(Uri.parse(url));
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        throw Exception('HTTP ${resp.statusCode}');
-      }
-
-      final baseDir = await getApplicationDocumentsDirectory();
-      final downloadDir = Directory('${baseDir.path}${Platform.pathSeparator}downloaded_photos');
-      if (!downloadDir.existsSync()) {
-        downloadDir.createSync(recursive: true);
-      }
-
-      final fileName = _buildDownloadFileName(survey, url);
-      final outFile = File('${downloadDir.path}${Platform.pathSeparator}$fileName');
-      await outFile.writeAsBytes(resp.bodyBytes, flush: true);
+      final fileName = _buildDownloadFileName(survey, url, desa: desa);
+      final bytes = await _loadStampedPhoto(
+        survey,
+        timestamp: timestamp,
+        desa: desa,
+        locationPrefix: locationPrefix,
+      );
+      if (!context.mounted) return;
+      final baseName = fileName.contains('.')
+          ? fileName.substring(0, fileName.lastIndexOf('.'))
+          : fileName;
+      final saved = await _saveWatermarkedBytes(context, bytes, baseName);
+      if (!saved) return;
 
       if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Foto berhasil diunduh ke: ${outFile.path}')),
+        const SnackBar(
+          content: Text('Foto ber-watermark tersimpan ke galeri.'),
+        ),
       );
     } catch (e) {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengunduh foto: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mengunduh foto: $e')));
     }
   }
 
@@ -222,31 +507,87 @@ class SurveyDetailPage extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: const Color(0xFFF1F5F9),
-              alignment: Alignment.center,
-              child: SelectableText(
-                'Gagal memuat foto.\nPath: $raw',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12.5),
+        child: InkWell(
+          onTap: () => _openStampedPhoto(survey),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFFF1F5F9),
+                    alignment: Alignment.center,
+                    child: SelectableText(
+                      'Gagal memuat foto.\nPath: $raw',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                  );
+                },
               ),
-            );
-          },
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC111827),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.visibility_outlined,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Lihat Watermark',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final id = ModalRoute.of(context)!.settings.arguments as int;
+    if (_surveyId != id) {
+      _surveyId = id;
+      _loadFuture = context.read<ApiSurveyProvider>().loadDetail(id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final id = _surveyId!;
 
     return FutureBuilder(
-      future: context.read<ApiSurveyProvider>().loadDetail(id),
+      future: _loadFuture,
       builder: (ctx, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
@@ -268,7 +609,53 @@ class SurveyDetailPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text('Detail Survey #${survey.id}'),
+            title: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  survey.desa.trim().isEmpty
+                      ? 'Detail Survei'
+                      : 'Desa ${survey.desa}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Detail Survei',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withAlpha(170),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Edit survey',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () async {
+                  final updated = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (_) =>
+                          SurveyPage(initialSurvey: _toEditableSurvey(survey)),
+                    ),
+                  );
+                  if (updated == true && mounted) {
+                    setState(() {
+                      _loadFuture = context
+                          .read<ApiSurveyProvider>()
+                          .loadDetail(id);
+                    });
+                  }
+                },
+              ),
+            ],
           ),
           body: Container(
             decoration: const BoxDecoration(
@@ -296,16 +683,54 @@ class SurveyDetailPage extends StatelessWidget {
                       children: [
                         _buildPhotoPreview(survey),
                         const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        Row(
                           children: [
-                            FilledButton.icon(
-                              onPressed: () => _downloadPhoto(context, survey),
-                              icon: const Icon(Icons.download_rounded),
-                              label: const Text('Download Foto'),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () =>
+                                    _downloadPhoto(context, survey),
+                                icon: const Icon(Icons.download_rounded),
+                                label: const Text('Download Foto'),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () =>
+                                    _editWatermarkAndDownload(survey),
+                                icon: const Icon(Icons.tune_rounded),
+                                label: const Text('Download & Edit'),
+                                style: FilledButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: const Color(0xFF0F766E),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _watermarkGalleryPhoto(survey),
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Watermark Foto dari Galeri'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF9A3412),
+                              backgroundColor: const Color(0xFFFFF7ED),
+                              side: const BorderSide(color: Color(0xFFFDBA74)),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -316,11 +741,25 @@ class SurveyDetailPage extends StatelessWidget {
                     icon: Icons.cell_tower,
                     child: Column(
                       children: [
-                        _DetailTile(label: 'Kecamatan', value: survey.kecamatan),
+                        _DetailTile(
+                          label: 'Kecamatan',
+                          value: survey.kecamatan,
+                        ),
                         _DetailTile(label: 'Desa', value: survey.desa),
                         _DetailTile(label: 'Latitude', value: survey.latitude),
-                        _DetailTile(label: 'Longitude', value: survey.longitude),
+                        _DetailTile(
+                          label: 'Longitude',
+                          value: survey.longitude,
+                        ),
                         _DetailTile(label: 'Operator', value: survey.operator),
+                        _DetailTile(
+                          label: 'Nama Pembuat Survey',
+                          value: survey.namaPembuat.isNotEmpty
+                              ? survey.namaPembuat
+                              : (survey.userId > 0
+                                    ? 'User ID ${survey.userId}'
+                                    : '-'),
+                        ),
                         _DetailTile(label: 'Jaringan', value: survey.jaringan),
                         _DetailTile(
                           label: 'Kekuatan Sinyal',
@@ -357,7 +796,9 @@ class SurveyDetailPage extends StatelessWidget {
                               child: _SpeedMetricCard(
                                 title: 'Download',
                                 value: _fmtMbps(survey.downloadSpeed),
-                                subtitle: _downloadQuality(survey.downloadSpeed),
+                                subtitle: _downloadQuality(
+                                  survey.downloadSpeed,
+                                ),
                                 accent: const Color(0xFF0369A1),
                                 icon: Icons.download_rounded,
                               ),
@@ -400,7 +841,9 @@ class SurveyDetailPage extends StatelessWidget {
                               return const SizedBox(
                                 height: 90,
                                 child: Center(
-                                  child: Text('Koordinat tidak valid untuk ditampilkan di peta.'),
+                                  child: Text(
+                                    'Koordinat tidak valid untuk ditampilkan di peta.',
+                                  ),
                                 ),
                               );
                             }
@@ -428,7 +871,8 @@ class SurveyDetailPage extends StatelessWidget {
                                       ),
                                       children: [
                                         TileLayer(
-                                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                          urlTemplate:
+                                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                                           userAgentPackageName: 'sigaptel',
                                         ),
                                         MarkerLayer(
@@ -462,6 +906,318 @@ class SurveyDetailPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _StampMetadata {
+  final DateTime timestamp;
+  final String village;
+  final String locationPrefix;
+
+  const _StampMetadata({
+    required this.timestamp,
+    required this.village,
+    required this.locationPrefix,
+  });
+}
+
+class _WatermarkMetadataEditor extends StatefulWidget {
+  final DateTime initialTimestamp;
+  final String initialVillage;
+
+  const _WatermarkMetadataEditor({
+    required this.initialTimestamp,
+    required this.initialVillage,
+  });
+
+  @override
+  State<_WatermarkMetadataEditor> createState() =>
+      _WatermarkMetadataEditorState();
+}
+
+class _WatermarkMetadataEditorState extends State<_WatermarkMetadataEditor> {
+  static const _months = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ];
+
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _villageController;
+  late final TextEditingController _locationPrefixController;
+  late DateTime _date;
+  late TimeOfDay _time;
+
+  @override
+  void initState() {
+    super.initState();
+    _villageController = TextEditingController(text: widget.initialVillage);
+    _locationPrefixController = TextEditingController();
+    _date = DateTime(
+      widget.initialTimestamp.year,
+      widget.initialTimestamp.month,
+      widget.initialTimestamp.day,
+    );
+    _time = TimeOfDay(
+      hour: widget.initialTimestamp.hour,
+      minute: widget.initialTimestamp.minute,
+    );
+  }
+
+  @override
+  void dispose() {
+    _villageController.dispose();
+    _locationPrefixController.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(DateTime value) =>
+      '${value.day} ${_months[value.month - 1]} ${value.year}';
+
+  String _formatTime(TimeOfDay value) =>
+      '${value.hour.toString().padLeft(2, '0')}:'
+      '${value.minute.toString().padLeft(2, '0')} WIB';
+
+  Future<void> _chooseDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected != null && mounted) {
+      setState(() => _date = selected);
+    }
+  }
+
+  Future<void> _chooseTime() async {
+    final selected = await showTimePicker(context: context, initialTime: _time);
+    if (selected != null && mounted) {
+      setState(() => _time = selected);
+    }
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final timestamp = DateTime.utc(
+      _date.year,
+      _date.month,
+      _date.day,
+      _time.hour,
+      _time.minute,
+    ).subtract(const Duration(hours: 7));
+    Navigator.of(context).pop(
+      _StampMetadata(
+        timestamp: timestamp,
+        village: _villageController.text.trim(),
+        locationPrefix: _locationPrefixController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: screenHeight * 0.82,
+        child: Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 12, 12, 4),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFCBD5E1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Download & Edit',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Tutup',
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                      children: [
+                        const Text(
+                          'Jam, tanggal, dan desa terisi dari data survei.',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Tanggal dan waktu',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _chooseDate,
+                                icon: const Icon(Icons.calendar_today_outlined),
+                                label: Text(_formatDate(_date)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _chooseTime,
+                                icon: const Icon(Icons.schedule_rounded),
+                                label: Text(_formatTime(_time)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        TextFormField(
+                          controller: _locationPrefixController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Jalan / patokan (opsional)',
+                            hintText: 'Contoh: Jalan ...',
+                            prefixIcon: Icon(Icons.add_road_rounded),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _villageController,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Desa',
+                            prefixIcon: Icon(Icons.location_on_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Nama desa wajib diisi'
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _submit,
+                        icon: const Icon(Icons.download_rounded),
+                        label: const Text('Terapkan & Download Foto'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WatermarkedPhotoViewer extends StatelessWidget {
+  final String title;
+  final Future<Uint8List> photoFuture;
+
+  const _WatermarkedPhotoViewer({
+    required this.title,
+    required this.photoFuture,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF090D14),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF090D14),
+        foregroundColor: Colors.white,
+        title: Text(title),
+      ),
+      body: FutureBuilder<Uint8List>(
+        future: photoFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            );
+          }
+          if (snapshot.hasError || snapshot.data == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Gagal menampilkan foto: ${snapshot.error ?? 'data kosong'}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
+            );
+          }
+
+          return LayoutBuilder(
+            builder: (context, constraints) => InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+                child: Image.memory(snapshot.data!, fit: BoxFit.contain),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -526,10 +1282,7 @@ class _SpeedMetricCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF475569),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
           ),
         ],
       ),
@@ -654,10 +1407,7 @@ class _DetailTile extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DetailTile({
-    required this.label,
-    required this.value,
-  });
+  const _DetailTile({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -671,10 +1421,7 @@ class _DetailTile extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFF64748B),
-                fontSize: 12.5,
-              ),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
             ),
           ),
           const Text(': '),

@@ -30,23 +30,25 @@ class PendingListPage extends StatelessWidget {
 
       if (!hasNetwork) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Belum ada jaringan internet untuk sync')),
+          const SnackBar(
+            content: Text('Belum ada jaringan internet untuk sync'),
+          ),
         );
         return;
       }
 
-      final result = await provider.syncPendingSurveys(apiProvider.submitSurvey);
+      final result = await provider.syncPendingSurveys(
+        (survey) => apiProvider.saveSurveyByVillageAndYear(survey),
+      );
       if (!context.mounted) {
         return;
       }
       final summary = result.messages.isNotEmpty
           ? result.messages.first
           : 'Sync selesai. Terkirim: ${result.sent}, gagal: ${result.failed}.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(summary),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(summary)));
     }
 
     return Scaffold(

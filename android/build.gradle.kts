@@ -29,6 +29,14 @@ subprojects {
             }
         }
     }
+
+    if (name == "image_gallery_saver") {
+        plugins.withId("com.android.library") {
+            extensions.configure<LibraryExtension> {
+                namespace = "com.sigaptel.image_gallery_saver"
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

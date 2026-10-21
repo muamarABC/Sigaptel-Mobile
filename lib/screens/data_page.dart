@@ -28,8 +28,9 @@ class _DataContentState extends State<DataContent> {
   void initState() {
     super.initState();
     _selectedYear = DateTime.now().year;
-    _loadFuture =
-        context.read<ApiSurveyProvider>().loadSurveys(tahun: _selectedYear);
+    _loadFuture = context.read<ApiSurveyProvider>().loadSurveys(
+      tahun: _selectedYear,
+    );
   }
 
   @override
@@ -57,17 +58,13 @@ class _DataContentState extends State<DataContent> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFEFF6FF),
-            Color(0xFFF8FAFC),
-            Color(0xFFF0FDFA),
-          ],
+          colors: [Color(0xFFEFF6FF), Color(0xFFF8FAFC), Color(0xFFEFF6FF)],
         ),
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
             child: _FilterPanel(
               selectedYear: _selectedYear,
               yearOptions: yearOptions,
@@ -104,10 +101,12 @@ class _DataContentState extends State<DataContent> {
                 final surveys = _desaQuery.isEmpty
                     ? allSurveys
                     : allSurveys
-                        .where((s) => s.desa
-                            .toLowerCase()
-                            .contains(_desaQuery.toLowerCase()))
-                        .toList();
+                          .where(
+                            (s) => s.desa.toLowerCase().contains(
+                              _desaQuery.toLowerCase(),
+                            ),
+                          )
+                          .toList();
                 if (surveys.isEmpty) {
                   return const Center(
                     child: Text(
@@ -259,7 +258,7 @@ class _FilterPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -284,13 +283,16 @@ class _FilterPanel extends StatelessWidget {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.location_on_rounded,
-                        size: 11, color: Color(0xFF059669)),
+                    Icon(
+                      Icons.location_on_rounded,
+                      size: 11,
+                      color: Color(0xFF2563EB),
+                    ),
                     SizedBox(width: 3),
                     Text(
                       'Cari Desa',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
                       ),
@@ -299,7 +301,7 @@ class _FilterPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 SizedBox(
-                  height: 38,
+                  height: 34,
                   child: TextField(
                     controller: desaCtrl,
                     onChanged: onDesaChanged,
@@ -309,14 +311,27 @@ class _FilterPanel extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                     decoration: _dropDeco('Cari desa...').copyWith(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 34,
+                        minHeight: 34,
+                      ),
                       prefixIcon: const Icon(
                         Icons.search_rounded,
                         size: 16,
                         color: Color(0xFF94A3B8),
                       ),
+                      suffixIconConstraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 34,
+                      ),
                       suffixIcon: ValueListenableBuilder<TextEditingValue>(
                         valueListenable: desaCtrl,
-                        builder: (_, val, __) => val.text.isEmpty
+                        builder: (_, val, _) => val.text.isEmpty
                             ? const SizedBox.shrink()
                             : GestureDetector(
                                 onTap: () {
@@ -339,20 +354,23 @@ class _FilterPanel extends StatelessWidget {
           const SizedBox(width: 8),
           // Tahun
           SizedBox(
-            width: 88,
+            width: 104,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.calendar_today_rounded,
-                        size: 11, color: Color(0xFF2563EB)),
+                    Icon(
+                      Icons.calendar_today_rounded,
+                      size: 11,
+                      color: Color(0xFF2563EB),
+                    ),
                     SizedBox(width: 3),
                     Text(
                       'Tahun',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
                       ),
@@ -361,20 +379,32 @@ class _FilterPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 SizedBox(
-                  height: 38,
+                  height: 34,
                   child: DropdownButtonFormField<int>(
                     initialValue: selectedYear,
                     isExpanded: true,
-                    decoration: _dropDeco(''),
+                    decoration: _dropDeco('').copyWith(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
+                    ),
                     style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w600),
+                      fontSize: 13,
+                      color: Color(0xFF0F172A),
+                      fontWeight: FontWeight.w600,
+                    ),
                     items: yearOptions
-                        .map((year) => DropdownMenuItem<int>(
-                              value: year,
-                              child: Text(year.toString()),
-                            ))
+                        .map(
+                          (year) => DropdownMenuItem<int>(
+                            value: year,
+                            child: Text(
+                              year.toString(),
+                              maxLines: 1,
+                              softWrap: false,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: onYearChanged,
                   ),
@@ -385,20 +415,23 @@ class _FilterPanel extends StatelessWidget {
           const SizedBox(width: 8),
           // Baris
           SizedBox(
-            width: 72,
+            width: 78,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.table_rows_rounded,
-                        size: 11, color: Color(0xFF0891B2)),
+                    Icon(
+                      Icons.table_rows_rounded,
+                      size: 11,
+                      color: Color(0xFF2563EB),
+                    ),
                     SizedBox(width: 3),
                     Text(
                       'Baris',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
                       ),
@@ -407,15 +440,21 @@ class _FilterPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 SizedBox(
-                  height: 38,
+                  height: 34,
                   child: DropdownButtonFormField<int>(
                     initialValue: rowsPerPage,
                     isExpanded: true,
-                    decoration: _dropDeco(''),
+                    decoration: _dropDeco('').copyWith(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
+                    ),
                     style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w600),
+                      fontSize: 13,
+                      color: Color(0xFF0F172A),
+                      fontWeight: FontWeight.w600,
+                    ),
                     items: const [
                       DropdownMenuItem<int>(value: 5, child: Text('5')),
                       DropdownMenuItem<int>(value: 8, child: Text('8')),
@@ -454,7 +493,7 @@ class _SurveyListCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFE2E8F0)),
@@ -465,8 +504,8 @@ class _SurveyListCard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 28,
-                    height: 28,
+                    width: 24,
+                    height: 24,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: const Color(0xFFDBEAFE),
@@ -486,7 +525,7 @@ class _SurveyListCard extends StatelessWidget {
                       survey.desa.isEmpty ? '-' : survey.desa,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 14.5,
+                        fontSize: 13,
                       ),
                     ),
                   ),
@@ -496,16 +535,22 @@ class _SurveyListCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Kecamatan: ${survey.kecamatan.isEmpty ? '-' : survey.kecamatan}',
-                style: const TextStyle(fontSize: 12.5, color: Color(0xFF334155)),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  color: Color(0xFF334155),
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
-                spacing: 8,
-                runSpacing: 6,
+                spacing: 6,
+                runSpacing: 5,
                 children: [
                   _MetricChip(label: 'Operator', value: survey.operator),
                   _MetricChip(label: 'Jaringan', value: survey.jaringan),
-                  _MetricChip(label: 'RSRP', value: survey.rsrp?.toString() ?? '-'),
+                  _MetricChip(
+                    label: 'RSRP',
+                    value: survey.rsrp?.toString() ?? '-',
+                  ),
                   _MetricChip(label: 'Sinyal', value: survey.kekuatanSinyal),
                   _MetricChip(label: 'Tahun', value: survey.tahunSurvei),
                 ],
@@ -528,7 +573,7 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final safeValue = value.isEmpty ? '-' : value;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
         color: const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(999),
@@ -536,7 +581,7 @@ class _MetricChip extends StatelessWidget {
       child: Text(
         '$label: $safeValue',
         style: const TextStyle(
-          fontSize: 11.5,
+          fontSize: 10.5,
           color: Color(0xFF1E3A8A),
           fontWeight: FontWeight.w600,
         ),
@@ -617,7 +662,7 @@ class _PaginationBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF2563EB), Color(0xFF0891B2)],
+                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
